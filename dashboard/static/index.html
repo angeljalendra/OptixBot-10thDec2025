@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Trading Dashboard</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" integrity="sha384-Vb3TnIYp6g8eW6nQkPkC3z6Vf4K/6qv7pO5qJfVqF7jv8HkVq3pS5GkSxv8dI2Q4O" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 20px; }
+    h2 { margin-top: 24px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background: #f4f4f4; text-align: left; }
+    .green { color: #2e7d32; }
+    .red { color: #c62828; }
+  </style>
+  </head>
+<body>
+  <h1>Trading Dashboard</h1>
+  <div id="status">Connecting...</div>
+
+  <h2>Signals</h2>
+  <table id="signals">
+    <thead>
+      <tr>
+        <th>Time</th><th>Symbol</th><th>Direction</th><th>Entry</th><th>Target</th><th>SL</th><th>Confidence</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Positions</h2>
+  <table id="positions">
+    <thead>
+      <tr>
+        <th>Time</th><th>Symbol</th><th>P&amp;L</th><th>Reason</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const socket = io();
+    const statusEl = document.getElementById('status');
+    socket.on('connect', () => { statusEl.textContent = 'Connected'; });
+    socket.on('disconnect', () => { statusEl.textContent = 'Disconnected'; });
+
+    const signalsBody = document.querySelector('#signals tbody');
+    const positionsBody = document.querySelector('#positions tbody');
+
+    function fmt(v) { return typeof v === 'number' ? v.toFixed(2) : (v || ''); }
+
+    socket.on('signal', (s) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${new Date().toLocaleTimeString()}</td>
+        <td>${s.symbol || ''}</td>
+        <td>${s.direction || ''}</td>
+        <td>${fmt(s.entry_price || s.entry)}</td>
+        <td>${fmt(s.target_price || s.target)}</td>
+        <td>${fmt(s.stop_loss || s.stop_loss_premium)}</td>
+        <td>${fmt(s.confidence)}</td>
+      `;
+      signalsBody.prepend(tr);
+      while (signalsBody.rows.length > 50) signalsBody.deleteRow(50);
+    });
+
+    socket.on('position', (p) => {
+      const tr = document.createElement('tr');
+      const pnlClass = (p.pnl || 0) >= 0 ? 'green' : 'red';
+      tr.innerHTML = `
+        <td>${new Date().toLocaleTimeString()}</td>
+        <td>${p.symbol || ''}</td>
+        <td class="${pnlClass}">${fmt(p.pnl)}</td>
+        <td>${p.exit_reason || ''}</td>
+      `;
+      positionsBody.prepend(tr);
+      while (positionsBody.rows.length > 50) positionsBody.deleteRow(50);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+    "closed_trades": [],
+    "daily_pnl": {},
+    "recent_signals": [],
+    "performance_metrics": {
+        "win_rate": 0,
+        "avg_win": 0,
+        "avg_loss": 0,
+        "largest_win": 0,
+        "largest_loss": 0,
+        "total_trades": 0,
+        "profitable_trades": 0,
+        "profit_factor": 0,
+        "daily_pnl": 0
+    },
+    "backtest_summary": {}
+}

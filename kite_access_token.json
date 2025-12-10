@@ -1,0 +1,40 @@
+{
+    "user_type": "individual/res_no_nn",
+    "email": "anju24891@gmail.com",
+    "user_name": "Anju Kumari",
+    "user_shortname": "Anju",
+    "broker": "ZERODHA",
+    "exchanges": [
+        "NCO",
+        "BSE",
+        "NFO",
+        "BFO",
+        "MF",
+        "NSE",
+        "MCX"
+    ],
+    "products": [
+        "CNC",
+        "NRML",
+        "MIS",
+        "BO",
+        "CO"
+    ],
+    "order_types": [
+        "MARKET",
+        "LIMIT",
+        "SL",
+        "SL-M"
+    ],
+    "avatar_url": null,
+    "user_id": "PVX703",
+    "api_key": "szkct60uqhh6kfji",
+    "access_token": "BnxmmYdKuIxiMiFjoolKp0LWiXMskQyn",
+    "public_token": "fTk6mvZyDOxuRDwIWFuycvkRLLSx6uEs",
+    "refresh_token": "",
+    "enctoken": "bh5mpyGaZauP1kft84Qz8e9njyQHcf81IPnkXSqYvhjRUgMVg9viEasSxs4dPKDPZ7GFggBzrbpq5wjSD9EyL8c4PptXytyTRI0LTLtp9ABNAZGwv5TBO9K2r1sAGlg=",
+    "login_time": "2025-12-10T12:30:06",
+    "meta": {
+        "demat_consent": "consent"
+    }
+}

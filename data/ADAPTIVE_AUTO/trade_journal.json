@@ -1,0 +1,1000 @@
+{
+    "closed_trades": [],
+    "daily_pnl": {},
+    "recent_signals": [
+        {
+            "symbol": "TRENT",
+            "direction": "IRON_CONDOR",
+            "strike": 254100,
+            "premium": 106.85,
+            "entry": 4062.0,
+            "target": 3980.8,
+            "stop_loss": 4082.3,
+            "confidence": 8.0,
+            "risk_reward": 4.0,
+            "timestamp": "2025-12-10T13:29:18.107543",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "TVSMOTOR",
+            "direction": "IRON_CONDOR",
+            "strike": 253650,
+            "premium": 74.0,
+            "entry": 3626.0,
+            "target": 3553.5,
+            "stop_loss": 3644.1,
+            "confidence": 8.0,
+            "risk_reward": 4.01,
+            "timestamp": "2025-12-10T13:29:20.853441",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "ULTRACEMCO",
+            "direction": "IRON_CONDOR",
+            "strike": 2511400,
+            "premium": 138.0,
+            "entry": 11376.0,
+            "target": 11148.5,
+            "stop_loss": 11432.9,
+            "confidence": 8.0,
+            "risk_reward": 4.0,
+            "timestamp": "2025-12-10T13:29:23.579666",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "UNIONBANK",
+            "direction": "IRON_CONDOR",
+            "strike": 25150,
+            "premium": 4.3,
+            "entry": 148.78,
+            "target": 145.8,
+            "stop_loss": 149.5,
+            "confidence": 8.0,
+            "risk_reward": 4.14,
+            "timestamp": "2025-12-10T13:29:26.352966",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "VBL",
+            "direction": "IRON_CONDOR",
+            "strike": 25450,
+            "premium": 2.9,
+            "entry": 473.2,
+            "target": 463.7,
+            "stop_loss": 475.6,
+            "confidence": 8.0,
+            "risk_reward": 3.96,
+            "timestamp": "2025-12-10T13:29:29.068415",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "VOLTAS",
+            "direction": "IRON_CONDOR",
+            "strike": 251340,
+            "premium": 30.45,
+            "entry": 1341.2,
+            "target": 1314.4,
+            "stop_loss": 1347.9,
+            "confidence": 8.0,
+            "risk_reward": 4.0,
+            "timestamp": "2025-12-10T13:29:31.809534",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "ZYDUSLIFE",
+            "direction": "IRON_CONDOR",
+            "strike": 25950,
+            "premium": 24.2,
+            "entry": 929.45,
+            "target": 910.9,
+            "stop_loss": 934.1,
+            "confidence": 8.0,
+            "risk_reward": 3.99,
+            "timestamp": "2025-12-10T13:29:34.545635",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "ABB",
+            "direction": "BULLISH",
+            "strike": 255200,
+            "premium": 80.55,
+            "entry": 5159.5,
+            "target": 5469.1,
+            "stop_loss": 5133.7,
+            "confidence": 10.0,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:35:32.389911",
+            "status": "PENDING",
+            "pending_reason": "position_already_open",
+            "source_strategy": "ADAPTIVE_AUTO"
+        },
+        {
+            "symbol": "AMBER",
+            "direction": "BEARISH",
+            "strike": 256700,
+            "premium": 249.85,
+            "entry": 6659.0,
+            "target": 6259.5,
+            "stop_loss": 6692.3,
+            "confidence": 10.0,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:35:40.887827",
+            "status": "PENDING",
+            "pending_reason": "position_already_open",
+            "source_strategy": "ADAPTIVE_AUTO"
+        },
+        {
+            "symbol": "APLAPOLLO",
+            "direction": "BEARISH",
+            "strike": 251740,
+            "premium": 28.0,
+            "entry": 1734.9,
+            "target": 1630.8,
+            "stop_loss": 1743.6,
+            "confidence": 10.0,
+            "risk_reward": 11.97,
+            "timestamp": "2025-12-10T13:35:51.889080",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bearish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bearish",
+                "side_count": 2,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "ASTRAL",
+            "direction": "BEARISH",
+            "strike": 251400,
+            "premium": 27.0,
+            "entry": 1404.1,
+            "target": 1319.9,
+            "stop_loss": 1411.1,
+            "confidence": 8.8825,
+            "risk_reward": 12.03,
+            "timestamp": "2025-12-10T13:36:00.175369",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "BAJAJ-AUTO",
+            "direction": "BULLISH",
+            "strike": 259000,
+            "premium": 141.55,
+            "entry": 8955.0,
+            "target": 9492.3,
+            "stop_loss": 8910.2,
+            "confidence": 8.8825,
+            "risk_reward": 11.99,
+            "timestamp": "2025-12-10T13:36:08.405975",
+            "status": "PENDING",
+            "pending_reason": "correlated_exposure",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "threshold": 0.5
+            }
+        },
+        {
+            "symbol": "BIOCON",
+            "direction": "BULLISH",
+            "strike": 25400,
+            "premium": 3.65,
+            "entry": 381.8,
+            "target": 404.7,
+            "stop_loss": 379.9,
+            "confidence": 10.0,
+            "risk_reward": 12.05,
+            "timestamp": "2025-12-10T13:36:13.864988",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 2,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "BLUESTARCO",
+            "direction": "BULLISH",
+            "strike": 251740,
+            "premium": 33.25,
+            "entry": 1732.6,
+            "target": 1836.6,
+            "stop_loss": 1723.9,
+            "confidence": 10.0,
+            "risk_reward": 11.95,
+            "timestamp": "2025-12-10T13:36:22.076849",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 3,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "BPCL",
+            "direction": "BEARISH",
+            "strike": 25350,
+            "premium": 4.3,
+            "entry": 355.05,
+            "target": 333.7,
+            "stop_loss": 356.8,
+            "confidence": 10.0,
+            "risk_reward": 12.2,
+            "timestamp": "2025-12-10T13:36:30.456668",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bearish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bearish",
+                "side_count": 3,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "CAMS",
+            "direction": "BULLISH",
+            "strike": 25750,
+            "premium": 17.15,
+            "entry": 744.9,
+            "target": 789.6,
+            "stop_loss": 741.2,
+            "confidence": 10.0,
+            "risk_reward": 12.08,
+            "timestamp": "2025-12-10T13:36:38.795119",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 4,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "COALINDIA",
+            "direction": "BULLISH",
+            "strike": 25400,
+            "premium": 0.75,
+            "entry": 382.15,
+            "target": 405.1,
+            "stop_loss": 380.2,
+            "confidence": 10.0,
+            "risk_reward": 11.77,
+            "timestamp": "2025-12-10T13:36:47.069954",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 5,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "DIXON",
+            "direction": "BEARISH",
+            "strike": 2513250,
+            "premium": 353.2,
+            "entry": 13203.0,
+            "target": 12410.8,
+            "stop_loss": 13269.0,
+            "confidence": 8.8825,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:36:55.301704",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "EICHERMOT",
+            "direction": "BULLISH",
+            "strike": 257300,
+            "premium": 130.35,
+            "entry": 7262.5,
+            "target": 7698.2,
+            "stop_loss": 7226.2,
+            "confidence": 10.0,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:37:03.515608",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 6,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "EXIDEIND",
+            "direction": "BULLISH",
+            "strike": 25350,
+            "premium": 24.9,
+            "entry": 373.0,
+            "target": 395.4,
+            "stop_loss": 371.1,
+            "confidence": 10.0,
+            "risk_reward": 11.79,
+            "timestamp": "2025-12-10T13:37:11.771688",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 7,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "GLENMARK",
+            "direction": "BULLISH",
+            "strike": 251940,
+            "premium": 56.45,
+            "entry": 1954.8,
+            "target": 2072.1,
+            "stop_loss": 1945.0,
+            "confidence": 10.0,
+            "risk_reward": 11.97,
+            "timestamp": "2025-12-10T13:37:20.036301",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 8,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "GODREJCP",
+            "direction": "BULLISH",
+            "strike": 251140,
+            "premium": 19.6,
+            "entry": 1135.9,
+            "target": 1204.1,
+            "stop_loss": 1130.2,
+            "confidence": 10.0,
+            "risk_reward": 11.96,
+            "timestamp": "2025-12-10T13:37:28.293852",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 9,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "GRASIM",
+            "direction": "BEARISH",
+            "strike": 252760,
+            "premium": 39.85,
+            "entry": 2749.8,
+            "target": 2584.8,
+            "stop_loss": 2763.5,
+            "confidence": 10.0,
+            "risk_reward": 12.04,
+            "timestamp": "2025-12-10T13:37:36.537261",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bearish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bearish",
+                "side_count": 4,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "HEROMOTOCO",
+            "direction": "BEARISH",
+            "strike": 255900,
+            "premium": 87.0,
+            "entry": 5944.5,
+            "target": 5587.8,
+            "stop_loss": 5974.2,
+            "confidence": 10.0,
+            "risk_reward": 12.01,
+            "timestamp": "2025-12-10T13:37:44.783605",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bearish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bearish",
+                "side_count": 5,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "HINDALCO",
+            "direction": "BULLISH",
+            "strike": 25850,
+            "premium": 9.75,
+            "entry": 830.65,
+            "target": 880.5,
+            "stop_loss": 826.5,
+            "confidence": 8.8825,
+            "risk_reward": 12.01,
+            "timestamp": "2025-12-10T13:37:53.011700",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "HINDZINC",
+            "direction": "BULLISH",
+            "strike": 25500,
+            "premium": 24.1,
+            "entry": 514.1,
+            "target": 544.9,
+            "stop_loss": 511.5,
+            "confidence": 10.0,
+            "risk_reward": 11.85,
+            "timestamp": "2025-12-10T13:38:01.213233",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 10,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "ICICIGI",
+            "direction": "BULLISH",
+            "strike": 251960,
+            "premium": 29.65,
+            "entry": 1936.7,
+            "target": 2052.9,
+            "stop_loss": 1927.0,
+            "confidence": 10.0,
+            "risk_reward": 11.98,
+            "timestamp": "2025-12-10T13:38:09.417949",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 11,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "INDUSTOWER",
+            "direction": "BULLISH",
+            "strike": 25400,
+            "premium": 14.7,
+            "entry": 406.15,
+            "target": 430.5,
+            "stop_loss": 404.1,
+            "confidence": 8.8825,
+            "risk_reward": 11.88,
+            "timestamp": "2025-12-10T13:38:18.037413",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "IOC",
+            "direction": "BEARISH",
+            "strike": 25150,
+            "premium": 0.22,
+            "entry": 163.84,
+            "target": 154.0,
+            "stop_loss": 164.7,
+            "confidence": 8.8825,
+            "risk_reward": 11.44,
+            "timestamp": "2025-12-10T13:38:26.313350",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "JUBLFOOD",
+            "direction": "BULLISH",
+            "strike": 25600,
+            "premium": 7.2,
+            "entry": 587.7,
+            "target": 623.0,
+            "stop_loss": 584.8,
+            "confidence": 10.0,
+            "risk_reward": 12.17,
+            "timestamp": "2025-12-10T13:38:34.507750",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 12,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "LODHA",
+            "direction": "BEARISH",
+            "strike": 251100,
+            "premium": 39.2,
+            "entry": 1073.5,
+            "target": 1009.1,
+            "stop_loss": 1078.9,
+            "confidence": 8.8825,
+            "risk_reward": 11.93,
+            "timestamp": "2025-12-10T13:38:42.728445",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "MFSL",
+            "direction": "BULLISH",
+            "strike": 251700,
+            "premium": 44.2,
+            "entry": 1711.3,
+            "target": 1814.0,
+            "stop_loss": 1702.7,
+            "confidence": 10.0,
+            "risk_reward": 11.94,
+            "timestamp": "2025-12-10T13:38:50.959654",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 13,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "MOTHERSON",
+            "direction": "BULLISH",
+            "strike": 25100,
+            "premium": 17.68,
+            "entry": 116.99,
+            "target": 124.0,
+            "stop_loss": 116.4,
+            "confidence": 10.0,
+            "risk_reward": 11.88,
+            "timestamp": "2025-12-10T13:38:59.180062",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 14,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "NAUKRI",
+            "direction": "BEARISH",
+            "strike": 251360,
+            "premium": 31.3,
+            "entry": 1348.5,
+            "target": 1267.6,
+            "stop_loss": 1355.2,
+            "confidence": 8.8825,
+            "risk_reward": 12.07,
+            "timestamp": "2025-12-10T13:39:07.398997",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "OIL",
+            "direction": "BULLISH",
+            "strike": 25400,
+            "premium": 8.4,
+            "entry": 400.0,
+            "target": 424.0,
+            "stop_loss": 398.0,
+            "confidence": 10.0,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:39:16.572690",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 15,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "ONGC",
+            "direction": "BULLISH",
+            "strike": 25250,
+            "premium": 0.59,
+            "entry": 239.57,
+            "target": 253.9,
+            "stop_loss": 238.4,
+            "confidence": 10.0,
+            "risk_reward": 12.25,
+            "timestamp": "2025-12-10T13:39:24.934336",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 16,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "PAYTM",
+            "direction": "BULLISH",
+            "strike": 251300,
+            "premium": 29.9,
+            "entry": 1284.7,
+            "target": 1361.8,
+            "stop_loss": 1278.3,
+            "confidence": 8.8825,
+            "risk_reward": 12.05,
+            "timestamp": "2025-12-10T13:39:33.160103",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "PNBHOUSING",
+            "direction": "BULLISH",
+            "strike": 25900,
+            "premium": 16.15,
+            "entry": 884.5,
+            "target": 937.6,
+            "stop_loss": 880.1,
+            "confidence": 10.0,
+            "risk_reward": 12.07,
+            "timestamp": "2025-12-10T13:39:41.517194",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 17,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "POLYCAB",
+            "direction": "BEARISH",
+            "strike": 257200,
+            "premium": 147.2,
+            "entry": 7188.0,
+            "target": 6756.7,
+            "stop_loss": 7223.9,
+            "confidence": 10.0,
+            "risk_reward": 12.01,
+            "timestamp": "2025-12-10T13:39:49.728356",
+            "status": "PENDING",
+            "pending_reason": "correlated_exposure",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "threshold": 0.5
+            }
+        },
+        {
+            "symbol": "POWERGRID",
+            "direction": "BULLISH",
+            "strike": 25250,
+            "premium": 17.9,
+            "entry": 266.35,
+            "target": 282.3,
+            "stop_loss": 265.0,
+            "confidence": 10.0,
+            "risk_reward": 11.81,
+            "timestamp": "2025-12-10T13:39:55.194834",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 18,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "SIEMENS",
+            "direction": "BULLISH",
+            "strike": 253200,
+            "premium": 70.8,
+            "entry": 3180.5,
+            "target": 3371.3,
+            "stop_loss": 3164.6,
+            "confidence": 8.8825,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:40:03.401244",
+            "status": "PENDING",
+            "pending_reason": "correlated_exposure",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "threshold": 0.5
+            }
+        },
+        {
+            "symbol": "SUNPHARMA",
+            "direction": "BULLISH",
+            "strike": 251800,
+            "premium": 18.45,
+            "entry": 1785.6,
+            "target": 1892.7,
+            "stop_loss": 1776.7,
+            "confidence": 10.0,
+            "risk_reward": 12.03,
+            "timestamp": "2025-12-10T13:40:08.884927",
+            "status": "PENDING",
+            "pending_reason": "max_signals_reached_bullish",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "side": "bullish",
+                "side_count": 19,
+                "max_signals": 1
+            }
+        },
+        {
+            "symbol": "TATASTEEL",
+            "direction": "BULLISH",
+            "strike": 25150,
+            "premium": 14.42,
+            "entry": 163.47,
+            "target": 173.3,
+            "stop_loss": 162.7,
+            "confidence": 8.8825,
+            "risk_reward": 12.77,
+            "timestamp": "2025-12-10T13:40:17.123335",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "TORNTPHARM",
+            "direction": "BULLISH",
+            "strike": 253800,
+            "premium": 69.75,
+            "entry": 3807.5,
+            "target": 4036.0,
+            "stop_loss": 3788.5,
+            "confidence": 8.8825,
+            "risk_reward": 12.03,
+            "timestamp": "2025-12-10T13:40:26.939833",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "VEDL",
+            "direction": "BULLISH",
+            "strike": 25550,
+            "premium": 6.2,
+            "entry": 529.4,
+            "target": 561.2,
+            "stop_loss": 526.8,
+            "confidence": 8.8825,
+            "risk_reward": 12.23,
+            "timestamp": "2025-12-10T13:40:35.265505",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "AMBER",
+            "direction": "BEARISH",
+            "strike": 256700,
+            "premium": 260.0,
+            "entry": 6654.0,
+            "target": 6254.8,
+            "stop_loss": 6687.4,
+            "confidence": 10.0,
+            "risk_reward": 11.95,
+            "timestamp": "2025-12-10T13:50:47.441615",
+            "status": "PENDING",
+            "pending_reason": "position_already_open",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "symbol": "AMBER"
+            }
+        },
+        {
+            "symbol": "APLAPOLLO",
+            "direction": "BEARISH",
+            "strike": 251740,
+            "premium": 33.0,
+            "entry": 1731.6,
+            "target": 1627.7,
+            "stop_loss": 1740.3,
+            "confidence": 8.8825,
+            "risk_reward": 11.94,
+            "timestamp": "2025-12-10T13:50:52.954871",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "ASTRAL",
+            "direction": "BEARISH",
+            "strike": 251400,
+            "premium": 28.0,
+            "entry": 1401.5,
+            "target": 1317.4,
+            "stop_loss": 1408.5,
+            "confidence": 8.8825,
+            "risk_reward": 12.01,
+            "timestamp": "2025-12-10T13:51:01.169308",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "BAJAJ-AUTO",
+            "direction": "BULLISH",
+            "strike": 259000,
+            "premium": 144.3,
+            "entry": 8960.0,
+            "target": 9497.6,
+            "stop_loss": 8915.2,
+            "confidence": 10.0,
+            "risk_reward": 12.0,
+            "timestamp": "2025-12-10T13:51:10.230382",
+            "status": "PENDING",
+            "pending_reason": "correlated_exposure",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "threshold": 0.5
+            }
+        },
+        {
+            "symbol": "BIOCON",
+            "direction": "BULLISH",
+            "strike": 25400,
+            "premium": 3.4,
+            "entry": 381.9,
+            "target": 404.8,
+            "stop_loss": 380.0,
+            "confidence": 10.0,
+            "risk_reward": 12.05,
+            "timestamp": "2025-12-10T13:51:15.746696",
+            "status": "PENDING",
+            "pending_reason": "awaiting_execution",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": 10.0,
+                "min_confidence": 8.5,
+                "risk_reward": 12.05,
+                "min_rr_ratio": 2.2,
+                "position_open": false
+            }
+        }
+    ],
+    "performance_metrics": {
+        "win_rate": 0,
+        "avg_win": 0,
+        "avg_loss": 0,
+        "largest_win": 0,
+        "largest_loss": 0,
+        "total_trades": 0,
+        "profitable_trades": 0,
+        "profit_factor": 0,
+        "daily_pnl": 0
+    },
+    "backtest_summary": {}
+}

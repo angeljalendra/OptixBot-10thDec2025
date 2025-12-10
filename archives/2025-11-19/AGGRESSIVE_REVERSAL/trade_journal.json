@@ -1,0 +1,165 @@
+{
+  "closed_trades": [],
+  "daily_pnl": {},
+  "performance_metrics": {
+    "win_rate": 0,
+    "avg_win": 0,
+    "avg_loss": 0,
+    "largest_win": 0,
+    "largest_loss": 0,
+    "total_trades": 0,
+    "profitable_trades": 0,
+    "profit_factor": 0,
+    "daily_pnl": 0
+  },
+  "backtest_summary": {
+    "summary": {
+      "timestamp": "2025-11-19T20:30:38.506157",
+      "symbols_tested": 20,
+      "avg_win_rate": 0.0,
+      "total_signals": 1280
+    },
+    "details": [
+      {
+        "symbol": "360ONE",
+        "signals": 67,
+        "wins": 0,
+        "losses": 25,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ABB",
+        "signals": 72,
+        "wins": 0,
+        "losses": 11,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ABCAPITAL",
+        "signals": 68,
+        "wins": 0,
+        "losses": 9,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ADANIENSOL",
+        "signals": 71,
+        "wins": 0,
+        "losses": 18,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ADANIENT",
+        "signals": 71,
+        "wins": 0,
+        "losses": 15,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ADANIGREEN",
+        "signals": 60,
+        "wins": 0,
+        "losses": 12,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ADANIPORTS",
+        "signals": 61,
+        "wins": 0,
+        "losses": 4,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ALKEM",
+        "signals": 51,
+        "wins": 0,
+        "losses": 9,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "AMBER",
+        "signals": 66,
+        "wins": 0,
+        "losses": 10,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "AMBUJACEM",
+        "signals": 78,
+        "wins": 0,
+        "losses": 1,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ANGELONE",
+        "signals": 57,
+        "wins": 0,
+        "losses": 18,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "APLAPOLLO",
+        "signals": 54,
+        "wins": 0,
+        "losses": 1,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "APOLLOHOSP",
+        "signals": 60,
+        "wins": 0,
+        "losses": 7,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ASHOKLEY",
+        "signals": 60,
+        "wins": 0,
+        "losses": 1,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ASIANPAINT",
+        "signals": 65,
+        "wins": 0,
+        "losses": 2,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ASTRAL",
+        "signals": 62,
+        "wins": 0,
+        "losses": 7,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "AUBANK",
+        "signals": 60,
+        "wins": 0,
+        "losses": 14,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "AUROPHARMA",
+        "signals": 57,
+        "wins": 0,
+        "losses": 7,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "AXISBANK",
+        "signals": 63,
+        "wins": 0,
+        "losses": 11,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "BAJAJ-AUTO",
+        "signals": 77,
+        "wins": 0,
+        "losses": 2,
+        "win_rate": 0.0
+      }
+    ]
+  }
+}

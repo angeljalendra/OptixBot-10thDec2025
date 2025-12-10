@@ -1,0 +1,284 @@
+{
+  "closed_trades": [],
+  "instance_breakdown": [
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "UNKNOWN",
+      "initial_capital": 0.0,
+      "journal": {},
+      "port": 5004,
+      "portfolio_value": 0.0,
+      "signals_found": 0,
+      "strategy": "UNKNOWN",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0,
+      "url": "http://0.0.0.0:5004/"
+    },
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "WEBSOCKET_ERROR",
+      "initial_capital": 150000.0,
+      "journal": {
+        "avg_loss": 0.0,
+        "avg_win": 0.0,
+        "largest_loss": 0.0,
+        "largest_win": 0.0,
+        "profit_factor": 0.0,
+        "profitable_trades": 0,
+        "total_trades": 0,
+        "win_rate": 0.0
+      },
+      "port": 5005,
+      "portfolio_value": 150000.0,
+      "signals_found": 0,
+      "strategy": "AGGRESSIVE_REVERSAL",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0,
+      "url": "http://0.0.0.0:5005/"
+    },
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "WEBSOCKET_ERROR",
+      "initial_capital": 50000.0,
+      "journal": {
+        "avg_loss": 0.0,
+        "avg_win": 0.0,
+        "largest_loss": 0.0,
+        "largest_win": 0.0,
+        "profit_factor": 0.0,
+        "profitable_trades": 0,
+        "total_trades": 0,
+        "win_rate": 0.0
+      },
+      "port": 5006,
+      "portfolio_value": 50000.0,
+      "signals_found": 0,
+      "strategy": "MID_TREND_SWING",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0,
+      "url": "http://0.0.0.0:5006/"
+    },
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "WEBSOCKET_ERROR",
+      "initial_capital": 100000.0,
+      "journal": {
+        "avg_loss": 0.0,
+        "avg_win": 0.0,
+        "largest_loss": 0.0,
+        "largest_win": 0.0,
+        "profit_factor": 0.0,
+        "profitable_trades": 0,
+        "total_trades": 0,
+        "win_rate": 0.0
+      },
+      "port": 5007,
+      "portfolio_value": 100000.0,
+      "signals_found": 0,
+      "strategy": "AGGRESSIVE_SCALP",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0,
+      "url": "http://0.0.0.0:5007/"
+    }
+  ],
+  "intraday_history": {
+    "labels": [
+      "20:39"
+    ],
+    "values": [
+      300000.0
+    ]
+  },
+  "market_data": {
+    "banknifty": {
+      "change": 316.8000000000029,
+      "change_percent": 0.5378676298934246,
+      "price": 59216.05
+    },
+    "finnifty": {
+      "change": 96.95000000000073,
+      "change_percent": 0.35194714439997726,
+      "price": 27643.7
+    },
+    "nifty": {
+      "change": 142.60000000000218,
+      "change_percent": 0.5503655917298584,
+      "price": 26052.65
+    },
+    "sensex": {
+      "change": 513.4499999999971,
+      "change_percent": 0.6063915046374831,
+      "price": 85186.47
+    }
+  },
+  "portfolio_history": {
+    "labels": [
+      "Now"
+    ],
+    "values": [
+      300000.0
+    ]
+  },
+  "positions": [],
+  "signals": [],
+  "sources": [
+    {
+      "health_status": "UNKNOWN",
+      "port": 5004,
+      "strategy": "UNKNOWN",
+      "url": "http://0.0.0.0:5004/"
+    },
+    {
+      "health_status": "WEBSOCKET_ERROR",
+      "port": 5005,
+      "strategy": "AGGRESSIVE_REVERSAL",
+      "url": "http://0.0.0.0:5005/"
+    },
+    {
+      "health_status": "WEBSOCKET_ERROR",
+      "port": 5006,
+      "strategy": "MID_TREND_SWING",
+      "url": "http://0.0.0.0:5006/"
+    },
+    {
+      "health_status": "WEBSOCKET_ERROR",
+      "port": 5007,
+      "strategy": "AGGRESSIVE_SCALP",
+      "url": "http://0.0.0.0:5007/"
+    }
+  ],
+  "strategy_breakdown": [
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "MIXED",
+      "initial_capital": 150000.0,
+      "journal": {
+        "avg_loss": 0.0,
+        "avg_win": 0.0,
+        "largest_loss": 0.0,
+        "largest_win": 0.0,
+        "profit_factor": 0.0,
+        "profitable_trades": 0,
+        "total_trades": 0,
+        "win_rate": 0.0
+      },
+      "portfolio_value": 150000.0,
+      "signals_found": 0,
+      "sources": [
+        {
+          "health_status": "WEBSOCKET_ERROR",
+          "port": 5005,
+          "strategy": "AGGRESSIVE_REVERSAL",
+          "url": "http://0.0.0.0:5005/"
+        }
+      ],
+      "strategy": "AGGRESSIVE_REVERSAL",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0
+    },
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "MIXED",
+      "initial_capital": 50000.0,
+      "journal": {
+        "avg_loss": 0.0,
+        "avg_win": 0.0,
+        "largest_loss": 0.0,
+        "largest_win": 0.0,
+        "profit_factor": 0.0,
+        "profitable_trades": 0,
+        "total_trades": 0,
+        "win_rate": 0.0
+      },
+      "portfolio_value": 50000.0,
+      "signals_found": 0,
+      "sources": [
+        {
+          "health_status": "WEBSOCKET_ERROR",
+          "port": 5006,
+          "strategy": "MID_TREND_SWING",
+          "url": "http://0.0.0.0:5006/"
+        }
+      ],
+      "strategy": "MID_TREND_SWING",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0
+    },
+    {
+      "active_trades": 0,
+      "api_calls": 0,
+      "health_status": "MIXED",
+      "initial_capital": 100000.0,
+      "journal": {
+        "avg_loss": 0.0,
+        "avg_win": 0.0,
+        "largest_loss": 0.0,
+        "largest_win": 0.0,
+        "profit_factor": 0.0,
+        "profitable_trades": 0,
+        "total_trades": 0,
+        "win_rate": 0.0
+      },
+      "portfolio_value": 100000.0,
+      "signals_found": 0,
+      "sources": [
+        {
+          "health_status": "WEBSOCKET_ERROR",
+          "port": 5007,
+          "strategy": "AGGRESSIVE_SCALP",
+          "url": "http://0.0.0.0:5007/"
+        }
+      ],
+      "strategy": "AGGRESSIVE_SCALP",
+      "total_pnl": 0.0,
+      "total_pnl_pct": 0.0,
+      "trades_executed": 0
+    }
+  ],
+  "summary": {
+    "active_trades": 0,
+    "api_calls": 0,
+    "cash": 300000.0,
+    "consecutive_losses": 0,
+    "daily_pnl": 0.0,
+    "daily_pnl_pct": 0.0,
+    "exit_signals_count": 0,
+    "exposure_value": 0.0,
+    "health_status": "HEALTHY",
+    "initial_capital": 300000.0,
+    "journal": {
+      "avg_loss": 0.0,
+      "avg_win": 0.0,
+      "largest_loss": 0.0,
+      "largest_win": 0.0,
+      "profit_factor": 0.0,
+      "profitable_trades": 0,
+      "total_trades": 0,
+      "win_rate": 0.0
+    },
+    "margin_used": 0.0,
+    "market_regime": "MIXED",
+    "portfolio_value": 300000.0,
+    "scan_cycles": 0,
+    "signals_found": 0,
+    "stocks_scanned": 0,
+    "strategy": "AGGREGATED",
+    "total_closed_pnl": 0,
+    "total_pnl": 0.0,
+    "total_pnl_pct": 0.0,
+    "trades_executed": 0
+  },
+  "timestamp": "2025-11-19T20:39:08"
+}

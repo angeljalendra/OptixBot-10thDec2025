@@ -1,0 +1,67 @@
+{
+  "closed_trades": [],
+  "daily_pnl": {},
+  "performance_metrics": {
+    "win_rate": 0,
+    "avg_win": 0,
+    "avg_loss": 0,
+    "largest_win": 0,
+    "largest_loss": 0,
+    "total_trades": 0,
+    "profitable_trades": 0,
+    "profit_factor": 0,
+    "daily_pnl": 0
+  },
+  "backtest_summary": {
+    "summary": {
+      "timestamp": "2025-11-19T20:30:39.654368",
+      "symbols_tested": 6,
+      "avg_win_rate": 0.0,
+      "total_signals": 8
+    },
+    "details": [
+      {
+        "symbol": "ABCAPITAL",
+        "signals": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ADANIENSOL",
+        "signals": 1,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": 0
+      },
+      {
+        "symbol": "ADANIGREEN",
+        "signals": 3,
+        "wins": 0,
+        "losses": 2,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ANGELONE",
+        "signals": 1,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": 0
+      },
+      {
+        "symbol": "ASHOKLEY",
+        "signals": 1,
+        "wins": 0,
+        "losses": 1,
+        "win_rate": 0.0
+      },
+      {
+        "symbol": "ASTRAL",
+        "signals": 1,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": 0
+      }
+    ]
+  }
+}

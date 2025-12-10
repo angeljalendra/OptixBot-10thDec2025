@@ -1,0 +1,15 @@
+Flask
+Flask-SocketIO
+eventlet
+yfinance
+pandas
+numpy
+schedule
+requests
+colorama
+python-dotenv
+kiteconnect
+psutil
+scipy
+
+#python3 run_all.py --mode PAPER --strategies ADAPTIVE_AUTO,HIGH_CONVICTION,MID_TREND_SWING,AGGRESSIVE_SCALP,AGGRESSIVE_REVERSAL --base-capital 500000 --allocations ADAPTIVE_AUTO:0.4,HIGH_CONVICTION:0.25,MID_TREND_SWING:0.15,AGGRESSIVE_SCALP:0.1,AGGRESSIVE_REVERSAL:0.1 --single-dashboard --agg-port 5002
