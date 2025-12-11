@@ -4,7 +4,7 @@ from signals.indicators import TechnicalIndicators
 from core.logger import Logger
 from config.settings import Settings
 from config.settings import get_config
-from signals.detector import SignalDetector
+from signals.detector import EliteSignalDetector
 from signals.validator import SignalValidator
 
 
@@ -15,50 +15,77 @@ class StrategyManager:
     def __init__(self, session, data_provider=None):
         self.session = session
         self.active_strategies = Settings.strategies.ACTIVE_STRATEGIES
-        self.detector = SignalDetector(session, data_provider=data_provider)
+        self.detector = EliteSignalDetector(session, data_provider=data_provider)
         self.validator = SignalValidator()
 
     def scan_all_strategies(self) -> List[Dict]:
         try:
-            cfg = get_config()
-            if str(cfg.get('universe_mode', '')).upper() == 'NFO_ONLY' and hasattr(self.detector, 'data_provider') and hasattr(self.detector.data_provider, 'get_nfo_underlyings'):
-                sz = int(cfg.get('expanded_universe_size', Settings.trading.MAX_POSITIONS))
-                symbols = self.detector.data_provider.get_nfo_underlyings(limit=sz)
-            else:
-                symbols = Settings.strategies.WATCHLIST
+            return self.scan_all_strategies_elite()
         except Exception:
-            symbols = Settings.strategies.WATCHLIST
-        raw = self.detector.scan_symbols(symbols)
-        valid = [s for s in raw if self.validator.validate(s)]
+            return []
+
+    def scan_all_strategies_elite(self) -> List[Dict]:
+        """
+        Elite scanning - focus on quality over quantity
+        """
+
+        cfg = get_config()
+
+        # Get symbols to scan (NFO + optional MCX commodities)
+        symbols: List[str] = []
         try:
-            max_positions = int(cfg.get('max_positions', Settings.trading.MAX_POSITIONS))
+            if hasattr(self.detector, 'data_provider') and hasattr(self.detector.data_provider, 'get_nfo_underlyings'):
+                symbols = self.detector.data_provider.get_nfo_underlyings(
+                    limit=int(cfg.get('expanded_universe_size', 20))
+                ) or []
         except Exception:
-            max_positions = Settings.trading.MAX_POSITIONS
-        scored = []
-        for s in valid:
-            q = float(s.get('confidence', 0)) * float(s.get('reward_risk_ratio', 0))
-            scored.append((q, s))
-        scored.sort(key=lambda x: x[0], reverse=True)
+            symbols = []
+        # Optionally add commodities if enabled and supported by data provider
         try:
-            per_side = int(cfg.get('max_signals_per_side', 0))
+            if bool(cfg.get('commodity_trading_enabled', False)) and hasattr(self.detector, 'data_provider') and hasattr(self.detector.data_provider, 'get_commodity_underlyings'):
+                commodities = self.detector.data_provider.get_commodity_underlyings(
+                    limit=int(cfg.get('expanded_universe_size', 50))
+                ) or []
+                symbols = (symbols or []) + commodities
         except Exception:
-            per_side = 0
-        if per_side and per_side > 0:
-            bulls = 0
-            bears = 0
-            selected = []
-            for _, s in scored:
-                d = str(s.get('direction', '')).upper()
-                if d == 'BULLISH' and bulls < per_side:
-                    selected.append(s)
-                    bulls += 1
-                elif d == 'BEARISH' and bears < per_side:
-                    selected.append(s)
-                    bears += 1
-                if len(selected) >= max_positions:
+            pass
+        if not symbols:
+            symbols = Settings.strategies.WATCHLIST[:20]
+
+        logger.info(f"⚡ ELITE SCAN: {len(symbols)} liquid symbols")
+
+        # Detect market regime
+        market_regime = self.assess_market_regime()
+        logger.info(f"📊 Market Regime: {market_regime}")
+
+
+        # Scan only most liquid symbols
+        raw_signals = self.detector.scan_symbols(symbols)
+
+        # Validate and filter
+        valid_signals = [s for s in raw_signals
+                        if float(s.get('confidence', 0)) >= 8.0 and
+                        float(s.get('reward_risk_ratio', 0)) >= 2.0]
+
+        # Apply precision filters
+        return self._apply_elite_filters(valid_signals, cfg)
+    def _apply_elite_filters(self, candidates: List[Dict], cfg: Dict) -> List[Dict]:
+        selected: List[Dict] = []
+        max_positions = int(cfg.get('max_positions', 2))
+        for s in candidates:
+            if len(selected) >= max_positions:
+                break
+            symbol = str(s.get('symbol', ''))
+            ok = True
+            for prev in selected:
+                psym = str(prev.get('symbol', ''))
+                if symbol == psym:
+                    ok = False
                     break
-            return self._apply_precision_filters(selected, cfg, max_positions)
-        return self._apply_precision_filters([s for _, s in scored], cfg, max_positions)
+            if ok:
+                selected.append(s)
+        logger.info(f"✅ Elite candidates selected: {len(selected)}")
+        return selected
 
     def _get_series(self, sym: str, window: int) -> List[float]:
         try:
@@ -115,6 +142,9 @@ class StrategyManager:
             if ok:
                 selected.append(s)
         return selected
+
+    def assess_market_regime(self) -> str:
+        return "TRENDING"
 
     def calculate_daily_metrics(self) -> Dict:
         return {

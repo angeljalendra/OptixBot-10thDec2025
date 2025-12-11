@@ -1650,6 +1650,16 @@ class UltimateFNOTrader:
             "ignore_nifty_filter": False,
             "expiry_mode": "ROBUST_AUTO"
         },
+        "ELITE_HIGH_CONVICTION": {
+            "min_conf": 9.5, "min_rr": 2.0, "lot_multiplier": 1, "tsl_activation_pct": 8.0,
+            "tsl_pullback_pct": 3.0, "max_profit_pct": 15.0,
+            "description": "Elite-grade selection, stricter thresholds.",
+            "quick_cash_target": 25000,
+            "time_exit_minutes": 20,
+            "partial_book_pct": 50,
+            "ignore_nifty_filter": False,
+            "expiry_mode": "ROBUST_AUTO"
+        },
         "AGGRESSIVE_REVERSAL": {
             "min_conf": 8.5, "min_rr": 2.0, "lot_multiplier": 2, "tsl_activation_pct": 5.0,
             "tsl_pullback_pct": 2.5, "max_profit_pct": 12.0,
@@ -5110,126 +5120,89 @@ class UltimateFNOTrader:
         return "TRENDING" if trending >= max(1, total // 2) else "RANGING"
 
     def run_continuous_scan_job(self):
-        if self.multi_strategy_mode:
-            return self.run_multi_strategy_cycle()
-        if self.check_max_daily_loss():
+        """
+        ELITE continuous scan - best trades only
+        """
+
+        # Check circuit breakers
+        if self.check_circuit_breakers():
+            logger.warning("Circuit breaker triggered - no new trades")
             return
-        if (getattr(self, 'active_strategy_key', None) == 'ADAPTIVE_AUTO' or getattr(self, 'display_strategy_key', None) == 'ADAPTIVE_AUTO') and bool(self.config.get('commodity_trading_enabled')):
-            return self.run_unified_auto_cycle()
 
-        is_commodity_mode = bool(self.strategy_params.get('market_type') == 'COMMODITY')
-        if not is_commodity_mode:
-            current_regime = self.assess_market_regime()
-            try:
-                new_strategy_key = self.select_best_strategy_nse(current_regime)
-            except Exception:
-                new_strategy_key = self.REGIME_STRATEGY_MAP.get(current_regime, "HIGH_CONVICTION")
-            if new_strategy_key != self.active_strategy_key:
-                self.set_active_strategy(new_strategy_key)
-                self.active_market_regime = current_regime
-                logger.info(f"{Fore.CYAN}--- MARKET SHIFT: Switching to {new_strategy_key} (Regime: {current_regime}) ---{Style.RESET_ALL}")
-        else:
-            self.active_market_regime = self.assess_commodity_regime()
+        # Assess market regime
+        regime = self.assess_market_regime()
+        logger.info(f"🔍 ELITE SCAN START - Market: {regime}")
 
-        scan_list = self.nse_fo_stocks or DEFAULT_NSE_UNIVERSE
-        
-        # COMMODITY TRADING: Add commodity symbols when using commodity strategies
-        if self.strategy_params.get('market_type') == 'COMMODITY':
-            scan_list = self.commodity_symbols or DEFAULT_COMMODITY_UNIVERSE
-            logger.info(f"{Fore.CYAN}⚡ RUNNING COMMODITY SCAN ({len(scan_list)} symbols) - {datetime.now().strftime('%H:%M')}{Style.RESET_ALL}")
-        else:
-            if self.config.get('universe_mode') == 'EXPANDED_LIQUID':
-                try:
-                    extra = self.compute_expanded_universe()
-                    scan_list = list(dict.fromkeys(self.nse_fo_stocks + extra))
-                except Exception:
-                    pass
-            logger.info(f"{Fore.CYAN}⚡ RUNNING FULL NFO SCAN ({len(scan_list)} symbols) - {datetime.now().strftime('%H:%M')}{Style.RESET_ALL}")
-
-        self.scan_summary['cycles_run'] += 1
-
+        full_list = self.nse_fo_stocks or DEFAULT_NSE_UNIVERSE
+        if not full_list:
+            logger.warning("No symbols to scan")
+            return
+        limit = len(full_list)
+        scan_list = full_list[:limit]
         batch_size = self.scan_batch_size
+        logger.info(f"⚙️ Elite scan list prepared: {len(scan_list)} symbols | batch {batch_size}")
+
+        threshold = 8.0 if self.mode == 'LIVE' else 7.5
         all_signals = []
         aggregate_data = {}
 
-        market_regime = self.assess_market_regime()
-        market_trend_bullish = (market_regime == "TRENDING")
-        nifty_filter_bypass = self.strategy_params.get('ignore_nifty_filter', False)
+        from signals.detector import EliteSignalDetector
+        detector = EliteSignalDetector()
 
         for i in range(0, len(scan_list), batch_size):
             batch_symbols = scan_list[i:i + batch_size]
-            logger.info(f"Scanning batch {i//batch_size + 1}/{(len(scan_list)-1)//batch_size + 1}: {len(batch_symbols)} symbols")
-
             batch_data = self.get_stock_data_batch_with_retry(batch_symbols)
             aggregate_data.update(batch_data)
-
             for symbol, data in batch_data.items():
-                if not data.empty:
+                if data is None or len(data) < 50:
+                    continue
+                try:
                     self.scan_summary['stocks_scanned_count'] += 1
-
+                except Exception:
+                    pass
                 try:
                     indicators = self.calculate_indicators(data)
-                    if not indicators or indicators['current_price'] < self.min_price:
-                        logger.debug(f"Skipping {symbol}: No indicators or price too low.")
+                    if not indicators:
                         continue
-
-                    signals = self.detect_signals(indicators)
-                    for direction, potential, confidence in signals:
-                        self.scan_summary['signals_found_count'] += 1
-
-                        if direction == 'BULLISH' and not market_trend_bullish and not nifty_filter_bypass:
-                             logger.debug(f"Skipping BULLISH signal for {symbol}: Nifty trend is not bullish (Filter ON).")
-                             continue
-
-                        if direction == 'BULLISH' and not market_trend_bullish and nifty_filter_bypass:
-                             logger.debug(f"Allowing BULLISH signal for {symbol}: Nifty trend is not bullish (Filter BYPASSED by strategy).")
-
-                        trade_plan = self.trade_plan(symbol, direction, potential, confidence,
-                                                     indicators['current_price'], indicators)
-                        if trade_plan:
-                            all_signals.append(trade_plan)
-                        else:
-                            try:
-                                signal_id = self.get_signal_id({'symbol': symbol, 'direction': direction}, None)
-                                if signal_id not in self.detected_signals_today:
-                                    self.detected_signals_today.add(signal_id)
-                                    pending_sig = {
-                                        'symbol': symbol,
-                                        'direction': direction,
-                                        'entry': float(indicators.get('current_price') or 0),
-                                        'target': None,
-                                        'stop_loss': None,
-                                        'confidence': float(confidence or 0),
-                                        'risk_reward': float(self.min_rr_ratio or 0),
-                                        'timestamp': datetime.now().isoformat(),
-                                        'status': 'PENDING',
-                                        'pending_reason': 'no_trade_plan',
-                                        'source_strategy': getattr(self, 'display_strategy_key', self.active_strategy_key)
-                                    }
-                                    self.recent_signals.append(pending_sig)
-                                    if len(self.recent_signals) > 50:
-                                        self.recent_signals = self.recent_signals[-50:]
-                                    try:
-                                        self.trade_journal['recent_signals'] = list(self.recent_signals[-50:])
-                                        save_trade_journal(self.trade_journal)
-                                    except Exception:
-                                        pass
-                                    if self.dashboard_app:
-                                        try:
-                                            self.dashboard_app.socketio.emit('signal', pending_sig)
-                                        except Exception:
-                                            pass
-                            except Exception:
-                                pass
+                    bullish_score = detector.calculate_elite_bullish_score(indicators)
+                    bearish_score = detector.calculate_elite_bearish_score(indicators)
+                    if bullish_score >= threshold:
+                        all_signals.append({
+                            'symbol': symbol,
+                            'direction': 'BULLISH',
+                            'confidence': bullish_score,
+                            'volatility': indicators['volatility'],
+                            'entry_price': indicators['current_price'],
+                            'reward_risk_ratio': 2.0
+                        })
+                    elif bearish_score >= threshold:
+                        all_signals.append({
+                            'symbol': symbol,
+                            'direction': 'BEARISH',
+                            'confidence': bearish_score,
+                            'volatility': indicators['volatility'],
+                            'entry_price': indicators['current_price'],
+                            'reward_risk_ratio': 2.0
+                        })
+                    else:
+                        try:
+                            logger.info(f"Rejected by threshold: {symbol} bull={bullish_score:.1f} bear={bearish_score:.1f} < {threshold}")
+                        except Exception:
+                            pass
                 except Exception as e:
                     logger.debug(f"Error processing {symbol}: {e}")
-
+                    continue
             if i + batch_size < len(scan_list):
                 time.sleep(1)
 
-        self.process_scan_results(all_signals)
+        try:
+            logger.info(f"Data fetch cumulative: {len(aggregate_data)}/{len(scan_list)} symbols successful")
+        except Exception:
+            pass
+
+        logger.info(f"📊 Elite candidates found: {len(all_signals)}")
+        self.process_scan_results_elite(all_signals)
         self.update_option_positions(aggregate_data)
-        logger.info(f"{Fore.CYAN}Scan Cycle Complete. Found {len(all_signals)} total potential signals.{Style.RESET_ALL}")
 
     def run_unified_auto_cycle(self):
         now = datetime.now()
@@ -5349,6 +5322,118 @@ class UltimateFNOTrader:
                 time.sleep(1)
         self.process_scan_results(all_signals)
         self.update_option_positions(aggregate_data)
+
+    def process_scan_results_elite(self, all_signals: List[Dict]):
+        from core.risk_manager import EliteRiskManager
+        rm = EliteRiskManager(self.session if hasattr(self, 'session') else None, self.config)
+
+        existing_positions = list(self.paper_portfolio.get('positions', {}).values())
+        portfolio_value = float(self.paper_portfolio.get('total_value', self.paper_portfolio.get('initial_capital', 0)) or 0)
+        initial_capital = float(self.paper_portfolio.get('initial_capital', 0) or 0)
+        portfolio_pnl_pct = ((portfolio_value - initial_capital) / initial_capital * 100.0) if initial_capital > 0 else 0.0
+
+        logger.info(f"🔍 ELITE SIGNAL PROCESSING: {len(all_signals)} candidates | Portfolio P&L: {portfolio_pnl_pct:.1f}% | Open: {len(existing_positions)}")
+
+        valid_signals = []
+        for signal in all_signals:
+            try:
+                sym = signal.get('symbol')
+                direction = str(signal.get('direction', '')).upper()
+                is_commodity = bool(self.strategy_params.get('market_type') == 'COMMODITY')
+                if is_commodity:
+                    expiry_date = self.get_next_commodity_expiry(sym)
+                else:
+                    expiry_date = self.get_next_tradable_expiry(sym)
+                days_to_expiry_int = (expiry_date - datetime.now().date()).days
+                enriched = dict(signal)
+                enriched['days_to_expiry'] = max(0, int(days_to_expiry_int))
+                enriched['premium'] = float(signal.get('entry_price', 0) or 0)
+                enriched['bid_ask_spread'] = float(signal.get('bid_ask_spread', 2))
+                ok, checks = rm.validate_signal_elite(enriched)
+                if not ok:
+                    failed_checks = [k for k, v in checks.items() if not v]
+                    logger.info(f"❌ Signal rejected: {sym} - Failed: {', '.join(failed_checks)}")
+                    continue
+                can_exec, reason = rm.validate_position_execution(enriched, existing_positions, portfolio_pnl_pct)
+                if not can_exec:
+                    logger.info(f"⏸️ Signal blocked: {sym} - {reason}")
+                    continue
+                valid_signals.append(enriched)
+            except Exception as e:
+                logger.debug(f"Elite validation failed for {signal.get('symbol')}: {e}")
+                continue
+
+        logger.info(f"✅ ELITE SIGNALS VALIDATED: {len(valid_signals)} passed all filters")
+        for vs in valid_signals:
+            try:
+                logger.info(f"Passed elite validation: {vs.get('symbol')} {vs.get('direction')} conf={float(vs.get('confidence',0)):.1f} rr={float(vs.get('reward_risk_ratio',0)):.2f} dte={int(vs.get('days_to_expiry',0))}")
+            except Exception:
+                pass
+        if len(valid_signals) == 0:
+            try:
+                logger.info("No elite signals passed; running backup HIGH_CONVICTION scan")
+            except Exception:
+                pass
+            try:
+                self.run_strategy_scan('HIGH_CONVICTION')
+            except Exception:
+                pass
+            return
+
+        scored = []
+        for s in valid_signals:
+            score = (float(s.get('confidence', 8)) + (float(s.get('reward_risk_ratio', 2)) / 3.0)) / 2.0
+            scored.append({'score': score, 'signal': s})
+        scored.sort(key=lambda x: x['score'], reverse=True)
+
+        bull = 0
+        bear = 0
+        final_trades = []
+        for item in scored:
+            s = item['signal']
+            direction = str(s.get('direction', '')).upper()
+            if direction == 'BULLISH' and bull >= 1:
+                logger.info(f"⏸️ Signal skipped (max bullish reached): {s.get('symbol')}")
+                continue
+            elif direction == 'BEARISH' and bear >= 1:
+                logger.info(f"⏸️ Signal skipped (max bearish reached): {s.get('symbol')}")
+                continue
+            if len(existing_positions) + len(final_trades) >= int(self.max_positions):
+                logger.info(f"⏸️ Signal skipped (position limit): {s.get('symbol')}")
+                continue
+            final_trades.append(s)
+            if direction == 'BULLISH':
+                bull += 1
+            else:
+                bear += 1
+
+        logger.info(f"🎯 FINAL ELITE TRADES: {len(final_trades)} ready for execution ({bull} bullish, {bear} bearish)")
+
+        if len(final_trades) == 0:
+            try:
+                logger.info("No elite trades selected; running backup HIGH_CONVICTION scan")
+            except Exception:
+                pass
+            try:
+                self.run_strategy_scan('HIGH_CONVICTION')
+            except Exception:
+                pass
+            return
+
+        for tp in final_trades:
+            try:
+                success = False
+                if bool(self.strategy_params.get('market_type') == 'COMMODITY'):
+                    success = self.execute_commodity_trade(tp)
+                    if success:
+                        logger.info(f"✅ COMMODITY EXECUTED: {tp['symbol']}")
+                else:
+                    success = self.execute_option_trade(tp)
+                    if success:
+                        logger.info(f"✅ OPTION EXECUTED: {tp['symbol']}")
+            except Exception as e:
+                logger.error(f"❌ Execution failed for {tp.get('symbol')}: {e}")
+                continue
 
     def _evaluate_strategy_signals(self, strategy_key: str, symbols: List[str], max_symbols: int = 20) -> Dict:
         try:
@@ -5876,8 +5961,15 @@ class UltimateFNOTrader:
             allow_mcx_anytime = (os.getenv('RUN_MCX_ANYTIME', '0') == '1')
             mcx_open_now = (MCX_OPEN <= current_minutes <= MCX_CLOSE) or allow_mcx_anytime
             try:
-                if not is_auto_unified:
-                    if mcx_open_now:
+                has_mcx_liquidity = False
+                try:
+                    base_list = [s for s in self.commodity_symbols if self.commodity_token_map.get(s)]
+                    has_mcx_liquidity = bool(base_list)
+                except Exception:
+                    has_mcx_liquidity = False
+
+                if is_auto_unified:
+                    if mcx_open_now and has_mcx_liquidity:
                         base_key = getattr(self, 'base_strategy_key', None)
                         if base_key is None and (self.active_strategy_key not in {"COMMODITY_TREND","COMMODITY_REVERSAL","COMMODITY_SCALP"}):
                             self.base_strategy_key = self.active_strategy_key

@@ -1236,14 +1236,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-        @self.app.route('/api/signals')
-        def api_signals():
-            try:
-                return jsonify({'ok': True, 'signals': self.signal_buffer[-200:]})
-            except Exception as e:
-                return jsonify({'ok': False, 'error': str(e), 'signals': []}), 500
-        def api_signals():
-            try:
-                return jsonify({'ok': True, 'signals': self.signal_buffer[-200:]})
-            except Exception as e:
-                return jsonify({'ok': False, 'error': str(e), 'signals': []}), 500

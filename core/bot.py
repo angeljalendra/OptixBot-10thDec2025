@@ -1,7 +1,7 @@
 import time
 import os
 import sys
-from typing import Optional
+from typing import Optional, List, Dict
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from config.settings import Settings, get_config
 from core.logger import Logger
@@ -129,6 +129,13 @@ class TradingBot:
         except Exception:
             pass
         signals = self.strategy_manager.scan_all_strategies()
+        try:
+            if bool(self.cfg.get('elite_mode', False)):
+                self.process_scan_results_elite(signals)
+                return
+        except Exception:
+            pass
+        # Default loop executes signals; elite users may call process_scan_results_elite explicitly
         for signal in signals:
             ok, checks = self.risk_manager.validate_signal_info(signal)
             if not ok:
@@ -157,7 +164,6 @@ class TradingBot:
                     self.alerts.send_trade(txt)
             except Exception:
                 pass
-            # Metrics update
             self.metrics['signals_count'] += 1
             self.metrics['trades_executed'] += 1
             self._recompute_metrics()
@@ -203,6 +209,83 @@ class TradingBot:
             self._recompute_metrics()
             self._publish('metrics', self.metrics)
         self._portfolio_tsl_check()
+
+    def process_scan_results_elite(self, all_signals: List[Dict]):
+        """
+        ELITE trading process - only best trades
+        Target: 2-4 trades per day with 90%+ win rate
+        """
+
+        from core.risk_manager import EliteRiskManager
+        rm = EliteRiskManager(self.session, self.cfg)
+
+        existing_positions = [{'symbol': getattr(p, 'symbol', None)} for p in self.executor.get_open_positions()]
+        portfolio_value = float(self.metrics.get('portfolio_value', self.metrics.get('initial_capital', 0)))
+        initial_capital = float(self.metrics.get('initial_capital', 0))
+        portfolio_pnl_pct = ((portfolio_value - initial_capital) / initial_capital * 100.0) if initial_capital > 0 else 0.0
+
+        logger.info(f"🔍 ELITE SIGNAL PROCESSING: {len(all_signals)} candidates | "
+                    f"Portfolio P&L: {portfolio_pnl_pct:.1f}% | Open: {len(existing_positions)}")
+
+        valid_signals = []
+        for signal in all_signals:
+            is_valid, checks = rm.validate_signal_elite(signal)
+            if not is_valid:
+                failed_checks = [k for k, v in checks.items() if not v]
+                logger.debug(f"❌ Signal rejected: {signal.get('symbol')} - Failed: {', '.join(failed_checks)}")
+                continue
+            can_execute, reason = rm.validate_position_execution(signal, existing_positions, portfolio_pnl_pct)
+            if not can_execute:
+                logger.info(f"⏸️ Signal blocked: {signal.get('symbol')} - {reason}")
+                continue
+            valid_signals.append(signal)
+
+        logger.info(f"✅ ELITE SIGNALS VALIDATED: {len(valid_signals)} passed all filters")
+
+        scored_signals = []
+        for signal in valid_signals:
+            score = (float(signal.get('confidence', 8)) + (float(signal.get('reward_risk_ratio', 2)) / 3.0)) / 2.0
+            scored_signals.append({'score': score, 'signal': signal})
+
+        scored_signals.sort(key=lambda x: x['score'], reverse=True)
+
+        bullish_count = 0
+        bearish_count = 0
+        final_trades = []
+
+        for item in scored_signals:
+            signal = item['signal']
+            direction = str(signal.get('direction', '')).upper()
+            if direction == 'BULLISH' and bullish_count >= 1:
+                logger.info(f"⏸️ Signal skipped (max bullish reached): {signal.get('symbol')}")
+                continue
+            elif direction == 'BEARISH' and bearish_count >= 1:
+                logger.info(f"⏸️ Signal skipped (max bearish reached): {signal.get('symbol')}")
+                continue
+            if len(existing_positions) + len(final_trades) >= int(self.cfg.get('max_positions', 2)):
+                logger.info(f"⏸️ Signal skipped (position limit): {signal.get('symbol')}")
+                continue
+            final_trades.append(signal)
+            if direction == 'BULLISH':
+                bullish_count += 1
+            else:
+                bearish_count += 1
+
+        logger.info(f"🎯 FINAL ELITE TRADES: {len(final_trades)} ready for execution "
+                    f"({bullish_count} bullish, {bearish_count} bearish)")
+
+        for trade_plan in final_trades:
+            try:
+                trade = self.executor.execute_trade(trade_plan)
+                if trade:
+                    logger.info(f"✅ TRADE EXECUTED: {trade_plan.get('symbol')}")
+                    self.metrics['signals_count'] += 1
+                    self.metrics['trades_executed'] += 1
+                    self._recompute_metrics()
+                    self._publish('metrics', self.metrics)
+            except Exception as e:
+                logger.error(f"❌ Execution failed for {trade_plan.get('symbol')}: {e}")
+                continue
 
     def _save_daily_metrics(self):
         metrics = self.strategy_manager.calculate_daily_metrics()

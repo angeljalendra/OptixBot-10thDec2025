@@ -12,6 +12,9 @@ class KiteAPI:
         self.spot_instruments = {}
         self.symbol_to_token: Dict[str, int] = {}
         self.token_to_symbol: Dict[int, str] = {}
+        self.commodity_instruments = {}
+        self.commodity_symbol_to_token: Dict[str, int] = {}
+        self.commodity_token_to_symbol: Dict[int, str] = {}
         self.market_data = {}
         self.history: Dict[str, List[float]] = {}
         self._kc = None
@@ -50,6 +53,15 @@ class KiteAPI:
                         self.spot_instruments[tsym] = inst
                         self.symbol_to_token[tsym.upper()] = token
                         self.token_to_symbol[token] = tsym.upper()
+                # Fetch MCX instruments for commodities
+                mcx = self._kc.instruments('MCX')
+                for inst in mcx:
+                    tsym = inst.get('tradingsymbol')
+                    token = inst.get('instrument_token')
+                    if tsym and token:
+                        self.commodity_instruments[tsym] = inst
+                        self.commodity_symbol_to_token[tsym.upper()] = token
+                        self.commodity_token_to_symbol[token] = tsym.upper()
                 return self.instruments
             except Exception:
                 pass
@@ -170,11 +182,15 @@ class KiteAPI:
             pass
 
     def _map_symbol_to_quote_key(self, symbol: str) -> str:
-        if symbol.upper() == 'NIFTY':
+        s = symbol.upper()
+        if s == 'NIFTY':
             return 'NSE:NIFTY 50'
-        if symbol.upper() == 'BANKNIFTY':
+        if s == 'BANKNIFTY':
             return 'NSE:NIFTY BANK'
-        return f'NSE:{symbol.upper()}'
+        # If known MCX commodity symbol, map to MCX
+        if s in self.commodity_symbol_to_token or s in self.commodity_instruments:
+            return f'MCX:{s}'
+        return f'NSE:{s}'
 
     def quote(self, key_or_keys):
         if not self._kc or not self.access_token:
@@ -211,6 +227,33 @@ class KiteAPI:
         # Fallback: seed with repeated current price
         cp = self.get_current_price(symbol)
         return [cp] * window
+
+    def get_commodity_underlyings(self, limit: int = 50) -> List[str]:
+        try:
+            if not self.commodity_instruments:
+                self.fetch_instruments()
+            counts: Dict[str, int] = {}
+            for inst in self.commodity_instruments.values():
+                try:
+                    seg = str(inst.get('segment', '')).upper()
+                    name = str(inst.get('name', '')).upper() or str(inst.get('tradingsymbol', '')).upper()
+                    if 'MCX' not in seg:
+                        continue
+                    itype = str(inst.get('instrument_type', '')).upper()
+                    if itype not in ('FUT', 'CE', 'PE'):
+                        continue
+                    if not name:
+                        continue
+                    counts[name] = counts.get(name, 0) + 1
+                except Exception:
+                    continue
+            liquid = [u for u, c in counts.items() if c >= 1]
+            liquid.sort(key=lambda x: counts.get(x, 0), reverse=True)
+            if limit and limit > 0:
+                liquid = liquid[:int(limit)]
+            return liquid
+        except Exception:
+            return []
 
     def get_spot_token(self, symbol: str) -> Optional[int]:
         return self.symbol_to_token.get(symbol.upper())
