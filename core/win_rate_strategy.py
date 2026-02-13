@@ -9,14 +9,23 @@ class WinRateOptimizer:
         'liquidity_minimum': 10,
     }
     @staticmethod
-    def validate_signal(signal_data):
+    def validate_signal(signal_data, min_conf=None, min_rr=None):
         try:
-            cfg = get_config()
-            min_conf = float(cfg.get('min_confidence', WinRateOptimizer.MIN_CONFIDENCE))
-            min_rr = float(cfg.get('min_rr_ratio', WinRateOptimizer.MIN_RR_RATIO))
+            if min_conf is None or min_rr is None:
+                cfg = get_config()
+                if min_conf is None:
+                    min_conf = float(cfg.get('min_confidence', WinRateOptimizer.MIN_CONFIDENCE))
+                if min_rr is None:
+                    min_rr = float(cfg.get('min_rr_ratio', WinRateOptimizer.MIN_RR_RATIO))
         except Exception:
-            min_conf = WinRateOptimizer.MIN_CONFIDENCE
-            min_rr = WinRateOptimizer.MIN_RR_RATIO
+            if min_conf is None:
+                min_conf = WinRateOptimizer.MIN_CONFIDENCE
+            if min_rr is None:
+                min_rr = WinRateOptimizer.MIN_RR_RATIO
+        
+        # Ensure we don't accidentally override passed values with defaults if something failed above
+        # (Though logic above handles None checks, this is extra safety)
+        
         checks = {
             'confidence': signal_data.get('confidence', 0) >= min_conf,
             'rr_ratio': signal_data.get('reward_risk_ratio', 0) >= min_rr,

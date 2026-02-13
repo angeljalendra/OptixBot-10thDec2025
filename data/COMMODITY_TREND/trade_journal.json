@@ -1,7 +1,38 @@
 {
     "closed_trades": [],
     "daily_pnl": {},
-    "recent_signals": [],
+    "recent_signals": [
+        {
+            "symbol": "SILVER",
+            "direction": "BEARISH",
+            "strike": 258690.0,
+            "premium": 258690.0,
+            "entry": 258638.0,
+            "target": 246967.0,
+            "stop_loss": 259931.2,
+            "confidence": 9.025,
+            "risk_reward": 9.02,
+            "timestamp": "2026-02-10T18:18:30.186767",
+            "status": "PENDING",
+            "pending_reason": "execution_failed",
+            "source_strategy": "COMMODITY_TREND"
+        },
+        {
+            "symbol": "NATGASMINI",
+            "direction": "BEARISH",
+            "strike": 283.2,
+            "premium": 283.2,
+            "entry": 282.5,
+            "target": 271.0,
+            "stop_loss": 285.0,
+            "confidence": 8.1225,
+            "risk_reward": 4.6,
+            "timestamp": "2026-02-10T18:30:01.671577",
+            "status": "PENDING",
+            "pending_reason": null,
+            "source_strategy": "COMMODITY_TREND"
+        }
+    ],
     "performance_metrics": {
         "win_rate": 0,
         "avg_win": 0,

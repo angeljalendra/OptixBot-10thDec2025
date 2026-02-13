@@ -54,7 +54,6 @@ class StrategyManager:
 
         logger.info(f"⚡ ELITE SCAN: {len(symbols)} liquid symbols")
 
-        # Detect market regime
         market_regime = self.assess_market_regime()
         logger.info(f"📊 Market Regime: {market_regime}")
 
@@ -62,10 +61,35 @@ class StrategyManager:
         # Scan only most liquid symbols
         raw_signals = self.detector.scan_symbols(symbols)
 
-        # Validate and filter
+        try:
+            conf_thr = float(cfg.get('precision_min_confidence', cfg.get('min_confidence', 8.0)))
+        except Exception:
+            conf_thr = 8.0
+        try:
+            rr_thr = float(cfg.get('precision_min_rr_ratio', cfg.get('min_rr_ratio', 2.0)))
+        except Exception:
+            rr_thr = 2.0
+        try:
+            if market_regime == 'RANGE':
+                conf_thr = max(0.0, conf_thr - 0.5)
+                rr_thr = max(1.5, rr_thr - 0.2)
+            elif market_regime == 'VOLATILE':
+                conf_thr = conf_thr + 0.3
+                rr_thr = rr_thr + 0.1
+        except Exception:
+            pass
         valid_signals = [s for s in raw_signals
-                        if float(s.get('confidence', 0)) >= 8.0 and
-                        float(s.get('reward_risk_ratio', 0)) >= 2.0]
+                         if float(s.get('confidence', 0)) >= conf_thr and
+                         float(s.get('reward_risk_ratio', 0)) >= rr_thr]
+        if not valid_signals and raw_signals:
+            try:
+                conf_fallback = max(7.5, conf_thr - 1.0)
+                rr_fallback = max(1.8, rr_thr - 0.2)
+                valid_signals = [s for s in raw_signals
+                                 if float(s.get('confidence', 0)) >= conf_fallback and
+                                 float(s.get('reward_risk_ratio', 0)) >= rr_fallback]
+            except Exception:
+                pass
 
         # Apply precision filters
         return self._apply_elite_filters(valid_signals, cfg)
@@ -144,7 +168,26 @@ class StrategyManager:
         return selected
 
     def assess_market_regime(self) -> str:
-        return "TRENDING"
+        sym = 'NIFTY'
+        try:
+            base = Settings.strategies.WATCHLIST
+            if isinstance(base, list) and base:
+                sym = base[0]
+        except Exception:
+            pass
+        ind = TechnicalIndicators(sym, data_provider=getattr(self.detector, 'data_provider', None))
+        price = ind.get_current_price()
+        sma = ind.calculate_sma()
+        rsi = ind.calculate_rsi()
+        atr_pct = ind.calculate_atr_percent()
+        sma50 = float(sma.get('sma50', price) or price)
+        sma200 = float(sma.get('sma200', price) or price)
+        r = float(rsi.get('value', 50))
+        if (price > sma50 > sma200) and (40 <= r <= 65):
+            return 'TRENDING'
+        if atr_pct >= 3.5 or r <= 35 or r >= 70:
+            return 'VOLATILE'
+        return 'RANGE'
 
     def calculate_daily_metrics(self) -> Dict:
         return {

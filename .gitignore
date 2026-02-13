@@ -1,0 +1,21 @@
+# Python and build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Environment and secrets
+.env
+kite_access_token.json
+
+# Logs and DB
+logs/
+trading_bot.db
+
+# Local data artifacts
+data/*/portfolio.json
+data/*/trade_journal.json

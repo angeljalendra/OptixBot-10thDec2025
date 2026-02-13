@@ -4,14 +4,26 @@ import numpy as np
 import time
 import json
 import os
+import argparse
 import requests
 import schedule
 import threading
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
+from dotenv import load_dotenv
+try:
+    from api.groww import GrowwAPI
+except Exception:
+    GrowwAPI = None
+try:
+    from config.settings import Settings
+except Exception:
+    Settings = None
 
 class UltimateFNOTrader:
-    def __init__(self):
+    def __init__(self, live_mode: bool = False):
+        self.live_mode = live_mode
+        load_dotenv()
         # COMPLETE LIST OF ALL NSE F&O STOCKS (200+ stocks)
         self.nse_fo_stocks = [
             # NIFTY 50
@@ -52,17 +64,17 @@ class UltimateFNOTrader:
             "HEIDELBERG.NS", "MANAPPURAM.NS", "MUTHOOTFIN.NS", "AUBANK.NS",
         ]
         
-        # Remove duplicates and ensure unique list
-        self.nse_fo_stocks = list(set(self.nse_fo_stocks))
+        # Remove duplicates and ensure unique, deterministic list
+        self.nse_fo_stocks = sorted(set(self.nse_fo_stocks))
         
-        # ULTIMATE Parameters
-        self.min_price = 50
-        self.min_volume = 100000
-        self.required_move = 4.0
-        self.min_confidence = 7.0
-        self.min_rr_ratio = 1.5
-        self.max_signals_per_side = 8
-        self.scan_batch_size = 15
+        # ULTIMATE Parameters (tuned for higher win rate)
+        self.min_price = 80
+        self.min_volume = 200000
+        self.required_move = 5.0
+        self.min_confidence = 8.8
+        self.min_rr_ratio = 2.0
+        self.max_signals_per_side = 4
+        self.scan_batch_size = 12
         
         # ULTIMATE Holding Periods - Adaptive based on market conditions
         self.base_holding_days = 2  # Default for F&O
@@ -72,15 +84,99 @@ class UltimateFNOTrader:
             'LOW_VOLATILITY': 4
         }
         
-        # INTRADAY Parameters
-        self.intraday_required_move = 2.0  # Smaller moves for intraday
-        self.intraday_min_confidence = 6.5  # Slightly lower confidence for intraday
-        self.intraday_max_signals = 12  # More signals for intraday
+        # INTRADAY Parameters (precision mode)
+        self.intraday_required_move = 2.2
+        self.intraday_min_confidence = 7.2
+        self.intraday_max_signals = 8
+        self.correlation_threshold = 0.8
+        self.cooldown_minutes = 20
+        self.min_win_rate_gate = 70.0
+        self.min_profit_factor_gate = 1.8
+        self.last_trade_time = {}
+        self.news_spike_pct = 3.0
+        self.news_spike_window = 10
+        self.news_spike_vol_ratio = 2.5
+        self.daily_max_trades = 4
+        self.default_lot_size = 100
+        self.news_spike_pct = 3.0
+        self.news_spike_window_minutes = 10
+        self.news_spike_vol_ratio = 2.5
         
-        # Telegram Configuration
-        self.telegram_token = "8427863153:AAE2QL09KYMuF-xlsNuhdF7j050qW15NJv8"
-        self.telegram_chat_id = None  # Will be auto-detected
-        self.telegram_enabled = True
+        # Telegram Configuration (from env/Settings)
+        self.telegram_token = os.getenv('TELEGRAM_TOKEN')
+        try:
+            cfg_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.json')
+            with open(cfg_path, 'r') as cf:
+                app_cfg = json.load(cf)
+            if not self.telegram_token and app_cfg.get('telegram_token'):
+                self.telegram_token = app_cfg.get('telegram_token')
+            self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID') or app_cfg.get('telegram_chat_id')
+            self.config_broker = (app_cfg.get('broker') or '').strip().upper()
+            try:
+                v = float(app_cfg.get('max_daily_loss_pct')) if app_cfg.get('max_daily_loss_pct') is not None else None
+                if v is not None:
+                    self.max_daily_loss_pct = v
+            except Exception:
+                self.max_daily_loss_pct = 3.0
+            try:
+                v2 = int(app_cfg.get('max_consecutive_losses')) if app_cfg.get('max_consecutive_losses') is not None else None
+                if v2 is not None:
+                    self.max_consecutive_losses = v2
+            except Exception:
+                self.max_consecutive_losses = 3
+            try:
+                mwr = float(app_cfg.get('precision_min_win_rate', app_cfg.get('min_win_rate_threshold', self.min_win_rate_gate)))
+                self.min_win_rate_gate = mwr
+            except Exception:
+                pass
+            try:
+                pf = float(app_cfg.get('precision_min_profit_factor', app_cfg.get('min_profit_factor_threshold', self.min_profit_factor_gate)))
+                self.min_profit_factor_gate = pf
+            except Exception:
+                pass
+            try:
+                cd = int(app_cfg.get('precision_cooldown_minutes', self.cooldown_minutes))
+                self.cooldown_minutes = cd
+            except Exception:
+                pass
+            try:
+                ct = float(app_cfg.get('precision_max_correlation', self.correlation_threshold))
+                self.correlation_threshold = ct
+            except Exception:
+                pass
+            try:
+                self.news_spike_pct = float(app_cfg.get('news_spike_pct', self.news_spike_pct))
+                self.news_spike_window = int(app_cfg.get('news_spike_window', self.news_spike_window))
+                self.news_spike_vol_ratio = float(app_cfg.get('news_spike_vol_ratio', self.news_spike_vol_ratio))
+            except Exception:
+                pass
+            try:
+                self.daily_max_trades = int(app_cfg.get('daily_max_trades', self.daily_max_trades))
+            except Exception:
+                pass
+            try:
+                nsp = float(app_cfg.get('news_spike_pct', self.news_spike_pct))
+                self.news_spike_pct = nsp
+            except Exception:
+                pass
+            try:
+                nsw = int(app_cfg.get('news_spike_window_minutes', self.news_spike_window_minutes))
+                self.news_spike_window_minutes = nsw
+            except Exception:
+                pass
+            try:
+                nsv = float(app_cfg.get('news_spike_vol_ratio', self.news_spike_vol_ratio))
+                self.news_spike_vol_ratio = nsv
+            except Exception:
+                pass
+        except Exception:
+            self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
+            self.config_broker = ''
+        if not self.telegram_token and Settings and Settings.telegram.TOKEN:
+            self.telegram_token = Settings.telegram.TOKEN
+        if not self.telegram_chat_id and Settings and Settings.telegram.CHAT_ID:
+            self.telegram_chat_id = Settings.telegram.CHAT_ID
+        self.telegram_enabled = False
         
         # Scheduling Configuration
         self.scheduler_running = False
@@ -106,35 +202,408 @@ class UltimateFNOTrader:
         if self.telegram_enabled:
             print("🤖 Telegram alerts ENABLED")
             print(f"📢 Telegram Channel: {self.telegram_chat_id}")
+        try:
+            self.broker = (self.config_broker or os.getenv('BROKER') or 'GROWW').strip().upper()
+            if self.broker == 'GROWW' and GrowwAPI:
+                ak = os.getenv('GROWW_API_KEY') or ''
+                sk = os.getenv('GROWW_API_SECRET') or ''
+                at = os.getenv('GROWW_ACCESS_TOKEN') or ''
+                bu = os.getenv('GROWW_BASE_URL') or ''
+                te = os.getenv('GROWW_TOKEN_ENDPOINT') or ''
+                self.groww = GrowwAPI(ak, sk, at, bu, te)
+                if not self.groww.access_token and ak and sk and te:
+                    tok = self.groww.generate_access_token_approval()
+                    if tok:
+                        os.environ['GROWW_ACCESS_TOKEN'] = tok
+        except Exception:
+            self.groww = None
 
+    def compute_recent_metrics(self) -> Dict:
+        wins = [t for t in self.performance_data if t.get('pnl', 0) > 0]
+        losses = [t for t in self.performance_data if t.get('pnl', 0) < 0]
+        win_rate = (len(wins) / len(self.performance_data) * 100) if self.performance_data else 0
+        profit_factor = (sum([t.get('pnl', 0) for t in wins]) / abs(sum([t.get('pnl', 0) for t in losses])) ) if losses else 0
+        return {'win_rate': win_rate, 'profit_factor': profit_factor}
+
+    def _symbol_returns(self, symbol: str, periods: int = 30) -> List[float]:
+        try:
+            s = yf.Ticker(symbol + '.NS')
+            df = s.history(period='1d', interval='5m')
+            if df is None or df.empty:
+                return []
+            close = df['Close'].tail(periods + 1)
+            r = close.pct_change().dropna().tolist()
+            return r
+        except Exception:
+            return []
+
+    def _correlation_with_open_positions(self, symbol: str) -> float:
+        try:
+            base = self._symbol_returns(symbol)
+            if not base:
+                return 0.0
+            corr_vals = []
+            for pos in self.paper_portfolio['positions'].values():
+                sym = pos.get('symbol')
+                if not sym:
+                    continue
+                r = self._symbol_returns(sym)
+                if r and len(r) == len(base):
+                    a = np.array(base)
+                    b = np.array(r)
+                    if np.std(a) > 0 and np.std(b) > 0:
+                        c = float(np.corrcoef(a, b)[0,1])
+                        corr_vals.append(c)
+            if corr_vals:
+                return float(np.mean(corr_vals))
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def can_execute_trade(self, trade_plan: Dict) -> bool:
+        metrics = self.compute_recent_metrics()
+        if metrics['win_rate'] < self.min_win_rate_gate or metrics['profit_factor'] < self.min_profit_factor_gate:
+            return False
+        sym = trade_plan.get('symbol')
+        if sym:
+            lt = self.last_trade_time.get(sym)
+            if lt and (datetime.now() - lt).total_seconds() < self.cooldown_minutes * 60:
+                return False
+            corr = self._correlation_with_open_positions(sym)
+            if corr >= self.correlation_threshold:
+                return False
+        try:
+            initial = float(self.paper_portfolio.get('initial_capital', self.paper_portfolio.get('total_value', 0)) or 0)
+            total = float(self.paper_portfolio.get('total_value', initial) or initial)
+            dd_pct = ((total - initial) / initial) * 100 if initial else 0
+            if dd_pct <= -abs(float(getattr(self, 'max_daily_loss_pct', 3.0) or 3.0)):
+                return False
+            cons = int(self.paper_portfolio.get('consecutive_losses', 0) or 0)
+            if cons >= int(getattr(self, 'max_consecutive_losses', 3) or 3):
+                return False
+        except Exception:
+            pass
+        return True
+
+    def init_kite_live(self):
+        try:
+            from trading_bot_live import UltimateFNOTrader as LiveEngine
+            # Initialize live engine
+            engine = LiveEngine(None, initial_strategy_key='SOTD_INTRADAY', request_token_override=None, allow_input=False)
+            self.kite = engine.kite
+            self.token_map = engine.token_map
+            self.live_engine = engine  # Store reference for order placement
+            if self.live_mode:
+                print("⚠️ LIVE TRADING MODE ENABLED - REAL ORDERS WILL BE PLACED")
+                if not self.kite:
+                    print("❌ Critical: Kite initialization failed in LIVE mode")
+                    self.live_mode = False
+        except Exception as e:
+            print(f"❌ Error initializing live engine: {e}")
+            self.kite = None
+            self.token_map = {}
+            self.live_engine = None
+            if self.live_mode:
+                print("❌ Failed to initialize live engine. Reverting to PAPER mode.")
+                self.live_mode = False
+
+    def get_intraday_data_kite(self, symbol: str) -> pd.DataFrame:
+        try:
+            if not hasattr(self, 'kite') or self.kite is None or not hasattr(self, 'token_map'):
+                return None
+            base = symbol.replace('.NS', '').upper()
+            token = self.token_map.get(base)
+            if not token:
+                return None
+            now = datetime.now()
+            from_date = (now - timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S")
+            to_date = now.strftime("%Y-%m-%d %H:%M:%S")
+            hist = self.kite.historical_data(token, from_date, to_date, '5minute', continuous=False)
+            df = pd.DataFrame(hist)
+            if df.empty:
+                return None
+            df.set_index('date', inplace=True)
+            df.index = pd.to_datetime(df.index)
+            df.rename(columns={'open':'Open','high':'High','low':'Low','close':'Close','volume':'Volume'}, inplace=True)
+            return df
+        except Exception:
+            return None
+
+    def get_intraday_data_groww(self, symbol: str) -> pd.DataFrame:
+        try:
+            if not getattr(self, 'groww', None):
+                return None
+            base = symbol.replace('.NS','')
+            o = self.groww.ohlc(base, interval="5m", limit=120)
+            if not o or o.get('status') != 'SUCCESS':
+                return None
+            payload = o.get('payload') or {}
+            rows = payload.get('data') or payload.get('rows') or []
+            if not rows:
+                return None
+            df = pd.DataFrame(rows)
+            op = next((c for c in df.columns if c.lower() == 'open'), None)
+            hi = next((c for c in df.columns if c.lower() == 'high'), None)
+            lo = next((c for c in df.columns if c.lower() == 'low'), None)
+            cl = next((c for c in df.columns if c.lower() == 'close'), None)
+            vo = next((c for c in df.columns if c.lower() == 'volume'), None)
+            ts = next((c for c in df.columns if c.lower() in ['time','ts','date']), None)
+            if not (op and hi and lo and cl and vo and ts):
+                return None
+            df.rename(columns={op:'Open',hi:'High',lo:'Low',cl:'Close',vo:'Volume',ts:'ts'}, inplace=True)
+            try:
+                df['ts'] = pd.to_datetime(df['ts'])
+                df.set_index('ts', inplace=True)
+            except Exception:
+                pass
+            return df[['Open','High','Low','Close','Volume']]
+        except Exception:
+            return None
+
+    def detect_news_spike(self, df: pd.DataFrame) -> Tuple[bool, float, float]:
+        try:
+            if df is None or df.empty:
+                return False, 0.0, 0.0
+            w = max(2, int(self.news_spike_window))
+            if len(df) < w + 2:
+                return False, 0.0, 0.0
+            base_close = float(df['Close'].iloc[-w-1])
+            last_close = float(df['Close'].iloc[-1])
+            drop_pct = ((last_close - base_close) / base_close) * 100
+            recent_vol = float(df['Volume'].iloc[-1])
+            avg_vol = float(df['Volume'].iloc[-w-1:-1].mean())
+            vol_ratio = (recent_vol / avg_vol) if avg_vol > 0 else 0.0
+            if drop_pct <= -abs(self.news_spike_pct) and vol_ratio >= self.news_spike_vol_ratio:
+                return True, drop_pct, vol_ratio
+            return False, drop_pct, vol_ratio
+        except Exception:
+            return False, 0.0, 0.0
+
+    def analyze_market_bias(self) -> str:
+        try:
+            s = yf.Ticker("^NSEI")
+            hist = s.history(period="5d", interval="15m")
+            if hist is None or hist.empty:
+                return "SIDEWAYS"
+            close = hist['Close']
+            sma_fast = close.rolling(8).mean().iloc[-1]
+            sma_slow = close.rolling(20).mean().iloc[-1]
+            change = (close.iloc[-1] - close.iloc[-8]) / close.iloc[-8] * 100 if len(close) > 8 else 0
+            if sma_fast > sma_slow and change > 0.3:
+                return "BULLISH"
+            if sma_fast < sma_slow and change < -0.3:
+                return "BEARISH"
+            return "SIDEWAYS"
+        except Exception:
+            return "SIDEWAYS"
+
+    def meet_confluence(self, direction: str, ind: Dict) -> bool:
+        try:
+            checks = 0
+            if direction == 'BULLISH':
+                if ind.get('above_vwap'): checks += 1
+                if ind.get('current_price') >= ind.get('resistance'): checks += 1
+                if ind.get('volume_ratio', 0) >= 2.0: checks += 1
+                if 35 <= float(ind.get('rsi', 50)): checks += 1
+            else:
+                if not ind.get('above_vwap'): checks += 1
+                if ind.get('current_price') <= ind.get('support'): checks += 1
+                if ind.get('volume_ratio', 0) >= 2.0: checks += 1
+                if float(ind.get('rsi', 50)) >= 55: checks += 1
+            return checks >= 3
+        except Exception:
+            return False
+
+    def intraday_scan_live_refresh(self, max_symbols: int = 20) -> Tuple[List[Dict], List[Dict]]:
+        bullish_trades = []
+        bearish_trades = []
+        start = time.time()
+        symbols = [s for s in self.nse_fo_stocks if s.endswith('.NS')][:max_symbols]
+        for symbol in symbols:
+            df = self.get_intraday_data_kite(symbol)
+            if df is None or df.empty:
+                continue
+            indicators = self.calculate_intraday_indicators(df)
+            if not indicators or indicators['current_price'] < self.min_price:
+                continue
+            signals = self.detect_intraday_signals(indicators)
+            if signals:
+                for direction, potential, confidence in signals:
+                    plan = self.intraday_trade_plan(symbol.replace('.NS',''), direction, potential, confidence, indicators['current_price'], indicators)
+                    if plan:
+                        if confidence >= 7.0:
+                            self.send_intraday_quick_alert(plan)
+                        if direction == 'BULLISH':
+                            bullish_trades.append(plan)
+                        else:
+                            bearish_trades.append(plan)
+        bullish_trades.sort(key=lambda x: (x['confidence'], x['potential']), reverse=True)
+        bearish_trades.sort(key=lambda x: (x['confidence'], x['potential']), reverse=True)
+        top_bullish = bullish_trades[:self.intraday_max_signals]
+        top_bearish = bearish_trades[:self.intraday_max_signals]
+        scan_time = time.time() - start
+        if self.telegram_enabled:
+            self.send_intraday_alerts(top_bullish, top_bearish)
+            self.send_intraday_scan_complete_alert(len(top_bullish), len(top_bearish), scan_time, self.analyze_market_volatility())
+        return top_bullish, top_bearish
     # ----------------- TELEGRAM METHODS -----------------
     def init_telegram(self):
         """Initialize Telegram bot"""
         try:
-            url = f"https://api.telegram.org/bot{self.telegram_token}/getUpdates"
-            response = requests.get(url, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data['ok'] and data['result']:
-                    self.telegram_chat_id = data['result'][-1]['message']['chat']['id']
-                    self.send_telegram_alert("🤖 Ultimate F&O Trader Started! 🚀")
-                else:
-                    print("❌ Please send a message to your bot first")
-                    self.telegram_enabled = False
-            else:
-                print("❌ Failed to connect to Telegram")
+            if not self.telegram_token:
                 self.telegram_enabled = False
-                
+                return
+            try:
+                u = requests.get(f"https://api.telegram.org/bot{self.telegram_token}/getMe", timeout=2.5)
+                if u.status_code == 200:
+                    info = u.json()
+                    self.bot_username = info.get('result', {}).get('username')
+                else:
+                    self.bot_username = None
+            except Exception:
+                self.bot_username = None
+            if not self.telegram_chat_id:
+                try:
+                    requests.get(
+                        f"https://api.telegram.org/bot{self.telegram_token}/deleteWebhook",
+                        params={"drop_pending_updates": False},
+                        timeout=2.5,
+                    )
+                except Exception:
+                    pass
+                try:
+                    url = f"https://api.telegram.org/bot{self.telegram_token}/getUpdates"
+                    resp = requests.get(url, params={"limit": 100}, timeout=3)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get('ok') and data.get('result'):
+                            cid_found = None
+                            for upd in data['result']:
+                                msg = upd.get('message') or upd.get('channel_post') or upd.get('my_chat_member') or upd.get('chat_join_request') or {}
+                                chat = msg.get('chat') or {}
+                                cid = chat.get('id')
+                                if cid:
+                                    cid_found = cid
+                            if cid_found:
+                                self.telegram_chat_id = cid_found
+                except Exception:
+                    pass
+            self.telegram_enabled = bool(self.telegram_token and self._has_chat_id())
+            if self.telegram_enabled:
+                self.send_telegram_alert("🤖 Ultimate F&O Trader Started! 🚀")
+            else:
+                # If token is present but chat id not yet available, start a watcher to auto-detect
+                self.start_chat_id_watcher("🤖 Ultimate F&O Trader Started! 🚀")
         except Exception as e:
-            print(f"❌ Telegram init failed: {e}")
             self.telegram_enabled = False
+
+    def _has_chat_id(self) -> bool:
+        try:
+            cid = self.telegram_chat_id
+            if cid is None:
+                return False
+            s = str(cid).strip().lower()
+            return s not in ("", "none", "null", "0")
+        except Exception:
+            return False
+
+    def ensure_telegram_ready(self) -> bool:
+        try:
+            if not self.telegram_token:
+                return False
+            if not self.telegram_chat_id:
+                try:
+                    try:
+                        requests.get(
+                            f"https://api.telegram.org/bot{self.telegram_token}/deleteWebhook",
+                            params={"drop_pending_updates": False},
+                            timeout=2.5,
+                        )
+                    except Exception:
+                        pass
+                    r = requests.get(
+                        f"https://api.telegram.org/bot{self.telegram_token}/getUpdates",
+                        params={"limit": 100},
+                        timeout=2.5,
+                    )
+                    if r.status_code == 200:
+                        d = r.json()
+                        if d.get('ok') and d.get('result'):
+                            cid_found = None
+                            for upd in d['result']:
+                                msg = upd.get('message') or upd.get('channel_post') or upd.get('my_chat_member') or upd.get('chat_join_request') or {}
+                                chat = msg.get('chat') or {}
+                                cid = chat.get('id')
+                                if cid:
+                                    cid_found = cid
+                            if cid_found:
+                                self.telegram_chat_id = cid_found
+                except Exception:
+                    pass
+            self.telegram_enabled = bool(self.telegram_token and self._has_chat_id())
+            return self.telegram_enabled
+        except Exception:
+            return False
+
+    def start_chat_id_watcher(self, on_ready_message: str = None, interval_sec: float = 5.0, max_attempts: int = 24):
+        if getattr(self, '_chat_id_watch_running', False):
+            return
+        self._chat_id_watch_running = True
+        def _run():
+            attempts = 0
+            while attempts < max_attempts and not self.telegram_chat_id:
+                ok = self.ensure_telegram_ready()
+                if ok:
+                    break
+                time.sleep(interval_sec)
+                attempts += 1
+            self._chat_id_watch_running = False
+            if self.telegram_enabled and on_ready_message:
+                try:
+                    self.send_telegram_alert(on_ready_message)
+                except Exception:
+                    pass
+        th = threading.Thread(target=_run, daemon=True)
+        th.start()
 
     def send_telegram_alert(self, message: str):
         """Send alert to Telegram"""
-        if not self.telegram_enabled or not self.telegram_chat_id:
-            return False
-            
+        if not self.telegram_enabled or not self._has_chat_id():
+            ok = self.ensure_telegram_ready()
+            if not ok:
+                try:
+                    requests.get(
+                        f"https://api.telegram.org/bot{self.telegram_token}/deleteWebhook",
+                        params={"drop_pending_updates": False},
+                        timeout=2.5,
+                    )
+                except Exception:
+                    pass
+                try:
+                    r = requests.get(
+                        f"https://api.telegram.org/bot{self.telegram_token}/getUpdates",
+                        params={"limit": 100},
+                        timeout=3,
+                    )
+                    if r.status_code == 200:
+                        d = r.json()
+                        if d.get('ok') and d.get('result'):
+                            cid_found = None
+                            for upd in d['result']:
+                                msg = upd.get('message') or upd.get('channel_post') or upd.get('my_chat_member') or upd.get('chat_join_request') or {}
+                                chat = msg.get('chat') or {}
+                                cid = chat.get('id')
+                                if cid:
+                                    cid_found = cid
+                            if cid_found:
+                                self.telegram_chat_id = cid_found
+                                self.telegram_enabled = True
+                            else:
+                                return False
+                    else:
+                        return False
+                except Exception:
+                    return False
         try:
             url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
             payload = {
@@ -142,10 +611,9 @@ class UltimateFNOTrader:
                 'text': message,
                 'parse_mode': 'HTML'
             }
-            response = requests.post(url, json=payload, timeout=10)
-            return response.status_code == 200
-        except Exception as e:
-            print(f"Telegram send failed: {e}")
+            resp = requests.post(url, json=payload, timeout=2.5)
+            return resp.status_code == 200
+        except Exception:
             return False
 
     def test_telegram_immediately(self):
@@ -157,6 +625,10 @@ class UltimateFNOTrader:
         # Test configuration
         print(f"🤖 Bot Token: {self.telegram_token[:10]}...{self.telegram_token[-10:]}")
         print(f"📢 Chat ID: {self.telegram_chat_id}")
+        if getattr(self, 'bot_username', None):
+            link = f"https://t.me/{self.bot_username}"
+            print(f"🔗 Bot Link: {link}")
+            print("   Open the link and send any message to activate alerts.")
         
         # Send test message
         test_message = "🚀 **ULTIMATE F&O TRADER - CONNECTION TEST**\n\n" \
@@ -174,6 +646,7 @@ class UltimateFNOTrader:
             print("🎉 TELEGRAM TEST SUCCESSFUL! Alerts will work during scanning.")
         else:
             print("❌ TELEGRAM TEST FAILED! Check your configuration.")
+            self.start_chat_id_watcher(on_ready_message=test_message)
             
         return success
 
@@ -218,7 +691,7 @@ class UltimateFNOTrader:
             self.display_stock_analysis(analysis_report, analysis_type)
             
             # Send Telegram alert for high-confidence signals
-            if self.telegram_enabled and analysis_report.get('trade_signal', {}).get('confidence', 0) >= 7.0:
+            if self.telegram_enabled and analysis_report.get('trade_signal', {}).get('confidence', 0) >= 8.5:
                 self.send_stock_analysis_alert(analysis_report)
                 
             return analysis_report
@@ -962,12 +1435,18 @@ Trend: {analysis['market_condition']['trend_short']}
         self.scheduler_running = True
         
         print("🚀 Starting automatic scheduler...")
-        if self.telegram_enabled:
-            self.send_telegram_alert("🤖 <b>AUTOMATIC SCHEDULER STARTED</b>\n\n" \
+        if not self.telegram_enabled:
+            self.ensure_telegram_ready()
+        if self.telegram_enabled and self._has_chat_id():
+            ok = self.send_telegram_alert("🤖 <b>AUTOMATIC SCHEDULER STARTED</b>\n\n" \
                                    "⚡ Trading bot is now running automatically!\n" \
                                    "📊 Scans will run at scheduled times\n" \
                                    "🔔 You will receive real-time alerts\n" \
                                    "💎 Bot: @AnvikSOD2026_bot")
+            if not ok:
+                self.start_chat_id_watcher("🤖 <b>AUTOMATIC SCHEDULER STARTED</b>\n\n⚡ Trading bot is now running automatically!")
+        else:
+            self.start_chat_id_watcher("🤖 <b>AUTOMATIC SCHEDULER STARTED</b>\n\n⚡ Trading bot is now running automatically!")
         
         # Run scheduler in a separate thread
         def run_scheduler():
@@ -1258,13 +1737,13 @@ Trend: {analysis['market_condition']['trend_short']}
             rr = round((price - target) / (stop - price), 2) if stop > price else 1
         
         # Position sizing based on confidence and RR
-        if confidence >= 8.0 and rr >= 2.0: 
+        if confidence >= 9.0 and rr >= 2.2: 
             size = "3-4%"
             paper_qty = 3
-        elif confidence >= 7.5 and rr >= 1.8: 
+        elif confidence >= 8.5 and rr >= 2.0: 
             size = "2-3%"
             paper_qty = 2
-        elif confidence >= 7.0 and rr >= 1.5: 
+        elif confidence >= 8.0 and rr >= 1.8: 
             size = "1-2%"
             paper_qty = 1
         else: 
@@ -1467,6 +1946,8 @@ Trend: {analysis['market_condition']['trend_short']}
             high = df['High']
             low = df['Low']
             volume = df['Volume']
+            typical_price = (high + low + close) / 3.0
+            vwap = float((typical_price * volume).cumsum().iloc[-1] / max(volume.cumsum().iloc[-1], 1))
             
             current_price = close.iloc[-1]
             prev_close = close.iloc[-2] if len(close) > 1 else close.iloc[-1]
@@ -1517,7 +1998,9 @@ Trend: {analysis['market_condition']['trend_short']}
                 'volatility': intraday_volatility,
                 'true_range': atr / current_price * 100,
                 'intraday_high': high.max(),
-                'intraday_low': low.min()
+                'intraday_low': low.min(),
+                'vwap': vwap,
+                'above_vwap': bool(current_price >= vwap)
             }
         except Exception as e:
             return None
@@ -1674,21 +2157,27 @@ Trend: {analysis['market_condition']['trend_short']}
             stop = round(price * (1 + base_stop_pct/100), 1)
             rr = round((price - target) / (stop - price), 2) if stop > price else 1
         
-        # Intraday position sizing (smaller)
-        if confidence >= 7.5 and rr >= 1.8: 
+        # Intraday position sizing using risk per trade
+        if confidence >= 8.0 and rr >= 2.0: 
             size = "2-3%"
             trade_type = "INTRADAY_CORE"
-            paper_qty = 2
-        elif confidence >= 6.5 and rr >= 1.5: 
+        elif confidence >= 7.2 and rr >= 1.6: 
             size = "1-2%"
             trade_type = "INTRADAY_SWING" 
-            paper_qty = 1
         else: 
             size = "0.5-1%"
             trade_type = "INTRADAY_TACTICAL"
+        try:
+            cap = float(self.paper_portfolio.get('initial_capital', 100000) or 100000)
+            risk_pct = float(getattr(self, 'max_risk_per_trade_pct', 1.0) or 1.0)
+            risk_amount = cap * (risk_pct / 100.0)
+            stop_abs = abs(price - stop)
+            lot = int(getattr(self, 'default_lot_size', 100) or 100)
+            paper_qty = max(1, int(risk_amount / max(stop_abs * lot, 1)))
+        except Exception:
             paper_qty = 1
-            
-        if rr < 1.2:  # Lower RR requirement for intraday
+        
+        if rr < 1.4:
             return None
             
         return {
@@ -1709,13 +2198,85 @@ Trend: {analysis['market_condition']['trend_short']}
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'trade_mode': 'INTRADAY'
         }
+    
+    def detect_big_move_signal(self, ind: Dict, intraday: bool = True) -> List[Tuple]:
+        signals = []
+        if not ind:
+            return signals
+        if intraday:
+            low_vol = ind.get('volatility', 100) < 22
+            vol_ok = ind.get('volume_ratio', 0) >= 2.0
+            res_dist = ((ind.get('resistance') - ind.get('current_price')) / ind.get('current_price')) * 100
+            sup_dist = ((ind.get('current_price') - ind.get('support')) / ind.get('current_price')) * 100
+            near_key = (0.5 <= res_dist <= 2.0) or (0.5 <= sup_dist <= 2.0)
+            rsi_mid = 40 <= ind.get('rsi', 50) <= 60
+            if low_vol and vol_ok and (near_key or rsi_mid):
+                bull_pot = max(2.2, min(5.0, 1.2 + (ind.get('volume_ratio', 1.0) - 1.0) * 1.2 + (res_dist > sup_dist) * 1.0))
+                bear_pot = max(2.2, min(5.0, 1.2 + (ind.get('volume_ratio', 1.0) - 1.0) * 1.2 + (sup_dist > res_dist) * 1.0))
+                bull_score = self.calculate_intraday_bullish_score(ind)
+                bear_score = self.calculate_intraday_bearish_score(ind)
+                if bull_score > bear_score + 0.8 and bull_score >= self.intraday_min_confidence:
+                    signals.append(('BULLISH', bull_pot, bull_score))
+                if bear_score > bull_score + 0.8 and bear_score >= self.intraday_min_confidence:
+                    signals.append(('BEARISH', bear_pot, bear_score))
+        else:
+            current_price = ind.get('current_price', 0)
+            bb_u = ind.get('bb_upper', current_price)
+            bb_l = ind.get('bb_lower', current_price)
+            bb_m = ind.get('bb_middle', current_price if current_price else 1)
+            bbw = ((bb_u - bb_l) / (bb_m if bb_m else current_price)) * 100 if bb_m else 0
+            low_vol = ind.get('volatility_20', 100) < 18
+            rsi_mid = 40 <= ind.get('rsi', 50) <= 60
+            if low_vol and rsi_mid and bbw < 12:
+                bull_score = self.calculate_bullish_score_single(ind)
+                bear_score = self.calculate_bearish_score_single(ind)
+                bull_pot = max(5.0, min(8.0, 2.0 + (10 - bbw) * 0.3))
+                bear_pot = max(5.0, min(8.0, 2.0 + (10 - bbw) * 0.3))
+                if bull_score > bear_score + 1.0 and bull_score >= self.min_confidence:
+                    signals.append(('BULLISH', bull_pot, bull_score))
+                if bear_score > bull_score + 1.0 and bear_score >= self.min_confidence:
+                    signals.append(('BEARISH', bear_pot, bear_score))
+        return signals
+    
+    def big_move_scan(self, source: str = "kite", max_symbols: int = 20):
+        bullish_trades = []
+        bearish_trades = []
+        symbols = [s for s in self.nse_fo_stocks if s.endswith('.NS')][:max_symbols]
+        for symbol in symbols:
+            try:
+                if source == "kite":
+                    df = self.get_intraday_data_kite(symbol)
+                else:
+                    df = self.get_intraday_data(symbol)
+                if df is None or df.empty:
+                    continue
+                ind = self.calculate_intraday_indicators(df)
+                if not ind or ind['current_price'] < self.min_price:
+                    continue
+                sigs = self.detect_big_move_signal(ind, intraday=True)
+                for direction, potential, confidence in sigs:
+                    plan = self.intraday_trade_plan(symbol.replace('.NS',''), direction, potential, confidence, ind['current_price'], ind)
+                    if plan:
+                        if direction == 'BULLISH':
+                            bullish_trades.append(plan)
+                        else:
+                            bearish_trades.append(plan)
+            except Exception:
+                continue
+        bullish_trades.sort(key=lambda x: (x['confidence'], x['potential']), reverse=True)
+        bearish_trades.sort(key=lambda x: (x['confidence'], x['potential']), reverse=True)
+        top_bullish = bullish_trades[:min(4, self.intraday_max_signals)]
+        top_bearish = bearish_trades[:min(4, self.intraday_max_signals)]
+        return top_bullish, top_bearish
 
     def intraday_scan(self):
         """Main intraday scanning function"""
         print(f"🚀 INTRADAY SCANNING {len(self.nse_fo_stocks)} STOCKS...")
         
         market_volatility = self.analyze_market_volatility()
+        market_bias = self.analyze_market_bias()
         print(f"📊 Market Volatility: {market_volatility}")
+        print(f"📈 Market Bias: {market_bias}")
         
         if self.telegram_enabled:
             self.send_telegram_alert(
@@ -1742,7 +2303,12 @@ Trend: {analysis['market_condition']['trend_short']}
             for symbol in batch_symbols:
                 try:
                     # Get intraday data
-                    df = self.get_intraday_data(symbol)
+                    if getattr(self, 'groww', None) and (os.getenv('BROKER') or 'GROWW').strip().upper() == 'GROWW':
+                        df = self.get_intraday_data_groww(symbol)
+                        if df is None:
+                            df = self.get_intraday_data(symbol)
+                    else:
+                        df = self.get_intraday_data(symbol)
                     if df is None:
                         continue
                     
@@ -1755,6 +2321,12 @@ Trend: {analysis['market_condition']['trend_short']}
                     signals = self.detect_intraday_signals(indicators)
                     if signals:
                         for direction, potential, confidence in signals:
+                            if market_bias == 'BULLISH' and direction == 'BEARISH':
+                                continue
+                            if market_bias == 'BEARISH' and direction == 'BULLISH':
+                                continue
+                            if not self.meet_confluence(direction, indicators):
+                                continue
                             trade_plan = self.intraday_trade_plan(
                                 symbol.replace('.NS', ''), 
                                 direction, potential, confidence,
@@ -1766,10 +2338,30 @@ Trend: {analysis['market_condition']['trend_short']}
                                 if confidence >= 7.0:
                                     self.send_intraday_quick_alert(trade_plan)
                                 
-                                if direction == 'BULLISH':
-                                    bullish_trades.append(trade_plan)
-                                else:
-                                    bearish_trades.append(trade_plan)
+                                if self.can_execute_trade(trade_plan):
+                                    if direction == 'BULLISH':
+                                        bullish_trades.append(trade_plan)
+                                    else:
+                                        bearish_trades.append(trade_plan)
+                    else:
+                        spike, drop_pct, vol_ratio = self.detect_news_spike(df)
+                        if spike and indicators and indicators['current_price'] >= self.min_price:
+                            trade_plan = self.intraday_trade_plan(
+                                symbol.replace('.NS',''),
+                                'BEARISH',
+                                max(self.intraday_required_move, min(5.0, abs(drop_pct))),
+                                max(self.intraday_min_confidence, min(9.0, 6.5 + (vol_ratio - self.news_spike_vol_ratio))),
+                                indicators['current_price'],
+                                indicators
+                            )
+                            if trade_plan and self.can_execute_trade(trade_plan):
+                                bearish_trades.append(trade_plan)
+                                if self.telegram_enabled:
+                                    try:
+                                        msg = f"📰 Sudden DOWN spike detected: {symbol.replace('.NS','')}\nDrop: {drop_pct:.1f}% Vol x{vol_ratio:.1f}"
+                                        self.send_telegram_alert(msg)
+                                    except Exception:
+                                        pass
                 
                 except Exception as e:
                     continue
@@ -2082,13 +2674,98 @@ Trend: {analysis['market_condition']['trend_short']}
         print("   • Target: 1:1.5+ Risk-Reward ratio")
         print("   • Diversify across sectors")
 
-    # ----------------- PAPER TRADING METHODS -----------------
-    def execute_paper_trade(self, trade_plan: Dict) -> bool:
-        """Execute paper trade based on trade plan"""
+    def execute_live_trade(self, trade_plan: Dict) -> bool:
+        """Execute LIVE trade using the live engine"""
+        if not self.live_mode or not self.live_engine:
+            return False
+            
         try:
             symbol = trade_plan['symbol']
             direction = trade_plan['direction']
-            quantity = trade_plan.get('paper_quantity', 1)
+            quantity = trade_plan.get('paper_quantity', 1) * self.live_engine.lot_sizes.get(symbol, 1) # Convert lots to qty
+            
+            print(f"🚀 EXECUTING LIVE TRADE: {symbol} {direction} {quantity} Qty")
+            
+            broker_sel = (os.getenv('BROKER') or 'GROWW').strip().upper()
+            order_id = None
+            if broker_sel == 'KITE' and self.live_engine.kite:
+                tx_type = self.live_engine.kite.TRANSACTION_TYPE_BUY if direction == 'BULLISH' else self.live_engine.kite.TRANSACTION_TYPE_SELL
+                order_id = self.live_engine._place_order(
+                    tradingsymbol=symbol,
+                    exchange=self.live_engine.kite.EXCHANGE_NFO,
+                    transaction_type=tx_type,
+                    quantity=quantity,
+                    product=self.live_engine.kite.PRODUCT_MIS,
+                    order_type=self.live_engine.kite.ORDER_TYPE_MARKET,
+                    price=None,
+                    validity=self.live_engine.kite.VALIDITY_DAY,
+                    variety=self.live_engine.kite.VARIETY_REGULAR
+                )
+            elif broker_sel == 'GROWW' and getattr(self.live_engine, 'groww_api', None):
+                payload = {
+                    'symbol': symbol,
+                    'side': 'BUY' if direction == 'BULLISH' else 'SELL',
+                    'quantity': int(quantity),
+                    'order_type': 'MARKET',
+                    'product': 'INTRADAY'
+                }
+                resp = self.live_engine.groww_api.place_order(payload)
+                if resp and str(resp.get('status','')).upper() == 'SUCCESS':
+                    order_id = (resp.get('payload') or {}).get('order_id') or resp.get('order_id')
+                    try:
+                        max_retries = 10
+                        filled_price = None
+                        for _ in range(max_retries):
+                            time.sleep(0.5)
+                            st = self.live_engine.groww_api.order_status(str(order_id))
+                            pl = st.get('payload') or {}
+                            status = str(pl.get('status') or st.get('status') or '').upper()
+                            ap = pl.get('average_price') or pl.get('avg_price') or pl.get('fill_price')
+                            if status == 'COMPLETE':
+                                if ap:
+                                    filled_price = float(ap)
+                                break
+                            if status in ['REJECTED','CANCELLED','FAILED']:
+                                break
+                        if filled_price:
+                            for t in self.trade_log:
+                                if t.get('status') == 'OPEN' and t.get('symbol') == symbol and t.get('direction') == direction:
+                                    t['entry_price'] = filled_price
+                                    break
+                    except Exception:
+                        pass
+            
+            if order_id:
+                print(f"✅ LIVE ORDER PLACED. ID: {order_id}")
+                if self.telegram_enabled:
+                     self.send_telegram_alert(f"🚀 <b>LIVE TRADE EXECUTED</b>\nOrder ID: {order_id}\nSymbol: {symbol}\nDirection: {direction}")
+                return True
+            else:
+                print("❌ LIVE ORDER FAILED")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error executing live trade: {e}")
+            return False
+
+    # ----------------- PAPER TRADING METHODS -----------------
+    def execute_paper_trade(self, trade_plan: Dict) -> bool:
+        """Execute paper trade based on trade plan"""
+        
+        # Divert to live execution if enabled
+        if self.live_mode:
+            return self.execute_live_trade(trade_plan)
+            
+        try:
+            if not self.can_execute_trade(trade_plan):
+                return False
+            today = datetime.now().strftime("%Y-%m-%d")
+            executed_today = len([t for t in self.trade_log if t.get('timestamp','').startswith(today) and t.get('status') == 'OPEN'])
+            if executed_today >= int(getattr(self, 'daily_max_trades', 4) or 4):
+                return False
+            symbol = trade_plan['symbol']
+            direction = trade_plan['direction']
+            quantity = int(trade_plan.get('paper_quantity', 1) or 1)
             price = trade_plan['entry']
             
             trade_value = price * quantity * 100  # Assuming lot size of 100 for F&O
@@ -2149,6 +2826,10 @@ Trend: {analysis['market_condition']['trend_short']}
             
             # Save trade history
             self.save_trade_history()
+            try:
+                self.last_trade_time[symbol] = datetime.now()
+            except Exception:
+                pass
             return True
             
         except Exception as e:
@@ -2164,30 +2845,56 @@ Trend: {analysis['market_condition']['trend_short']}
             for position_key, position in self.paper_portfolio['positions'].items():
                 symbol = position['symbol'] + '.NS'
                 try:
-                    stock = yf.Ticker(symbol)
-                    current_data = stock.history(period='1d', interval='1m')
+                    current_price = None
+                    if getattr(self, 'groww', None) and (os.getenv('BROKER') or 'GROWW').strip().upper() == 'GROWW':
+                        q = self.groww.ltp([symbol.replace('.NS','')])
+                        if q and q.get('status') == 'SUCCESS':
+                            payload = q.get('payload') or {}
+                            data = payload.get('data') or payload.get('ltp') or {}
+                            lp = None
+                            try:
+                                lp = float((data.get(symbol.replace('.NS','')) or data.get('last_price') or 0))
+                            except Exception:
+                                lp = None
+                            if lp:
+                                current_price = lp
+                    if current_price is None:
+                        stock = yf.Ticker(symbol)
+                        current_data = stock.history(period='1d', interval='1m')
+                        if not current_data.empty:
+                            current_price = current_data['Close'].iloc[-1]
+                    position['current_price'] = current_price
+                    position_value = current_price * position['quantity'] * 100  # Lot size 100
+                    total_value += position_value
                     
-                    if not current_data.empty:
-                        current_price = current_data['Close'].iloc[-1]
-                        position['current_price'] = current_price
-                        position_value = current_price * position['quantity'] * 100  # Lot size 100
-                        total_value += position_value
-                        
-                        # Check for stop loss or target hit
-                        if position['direction'] == 'BULLISH':
-                            if current_price <= position['stop_loss']:
-                                print(f"🛑 STOP LOSS hit for {position['symbol']}")
-                                positions_to_remove.append((position_key, current_price, "STOP LOSS"))
-                            elif current_price >= position['target']:
-                                print(f"🎯 TARGET hit for {position['symbol']}")
-                                positions_to_remove.append((position_key, current_price, "TARGET"))
-                        else:  # BEARISH
-                            if current_price >= position['stop_loss']:
-                                print(f"🛑 STOP LOSS hit for {position['symbol']}")
-                                positions_to_remove.append((position_key, current_price, "STOP LOSS"))
-                            elif current_price <= position['target']:
-                                print(f"🎯 TARGET hit for {position['symbol']}")
-                                positions_to_remove.append((position_key, current_price, "TARGET"))
+                    if position.get('trade_mode') == 'INTRADAY':
+                        try:
+                            move = (current_price - position['entry_price']) if position['direction'] == 'BULLISH' else (position['entry_price'] - current_price)
+                            move_pct = (move / position['entry_price']) * 100 if position['entry_price'] else 0
+                            if move_pct > 1.0:
+                                new_stop = position['entry_price'] * (1 - 0.6/100) if position['direction']=='BULLISH' else position['entry_price'] * (1 + 0.6/100)
+                                if position['direction']=='BULLISH' and new_stop > position['stop_loss']:
+                                    position['stop_loss'] = new_stop
+                                if position['direction']=='BEARISH' and new_stop < position['stop_loss']:
+                                    position['stop_loss'] = new_stop
+                        except Exception:
+                            pass
+                    
+                    # Check for stop loss or target hit
+                    if position['direction'] == 'BULLISH':
+                        if current_price <= position['stop_loss']:
+                            print(f"🛑 STOP LOSS hit for {position['symbol']}")
+                            positions_to_remove.append((position_key, current_price, "STOP LOSS"))
+                        elif current_price >= position['target']:
+                            print(f"🎯 TARGET hit for {position['symbol']}")
+                            positions_to_remove.append((position_key, current_price, "TARGET"))
+                    else:
+                        if current_price >= position['stop_loss']:
+                            print(f"🛑 STOP LOSS hit for {position['symbol']}")
+                            positions_to_remove.append((position_key, current_price, "STOP LOSS"))
+                        elif current_price <= position['target']:
+                            print(f"🎯 TARGET hit for {position['symbol']}")
+                            positions_to_remove.append((position_key, current_price, "TARGET"))
                                 
                 except Exception as e:
                     print(f"❌ Error updating {position['symbol']}: {e}")
@@ -2227,6 +2934,13 @@ Trend: {analysis['market_condition']['trend_short']}
                 'trade_mode': position.get('trade_mode', 'SWING'),
                 'exit_reason': reason
             })
+            try:
+                if pnl > 0:
+                    self.paper_portfolio['consecutive_losses'] = 0
+                else:
+                    self.paper_portfolio['consecutive_losses'] = int(self.paper_portfolio.get('consecutive_losses', 0) or 0) + 1
+            except Exception:
+                pass
             
             # Update trade log
             for trade in self.trade_log:
@@ -2266,6 +2980,53 @@ Trend: {analysis['market_condition']['trend_short']}
         except Exception as e:
             print(f"❌ Error closing position: {e}")
 
+    def run_intraday_backtest(self, days: int = 3, max_symbols: int = 20):
+        try:
+            symbols = [s for s in self.nse_fo_stocks if s.endswith('.NS')][:max_symbols]
+            now = datetime.now()
+            start = now - timedelta(days=days)
+            results = []
+            for symbol in symbols:
+                try:
+                    s = yf.Ticker(symbol)
+                    df = s.history(start=start.strftime('%Y-%m-%d'), end=now.strftime('%Y-%m-%d'), interval='15m')
+                    if df is None or df.empty:
+                        continue
+                    df.rename(columns={'Open':'Open','High':'High','Low':'Low','Close':'Close','Volume':'Volume'}, inplace=True)
+                    wins = 0
+                    losses = 0
+                    for i in range(30, len(df)):
+                        window = df.iloc[i-30:i]
+                        ind = self.calculate_intraday_indicators(window)
+                        if not ind or ind['current_price'] < self.min_price:
+                            continue
+                        sigs = self.detect_intraday_signals(ind)
+                        for direction, potential, confidence in sigs:
+                            entry = ind['current_price']
+                            base_stop_pct = max(ind['true_range'] * 1.2, min(max(ind['volatility'] * 0.08, 1.0), 3.0))
+                            future = df.iloc[i:min(i+12, len(df))]['Close']
+                            if direction == 'BULLISH':
+                                target = entry * (1 + min(potential, 5.0)/100)
+                                stop = entry * (1 - base_stop_pct/100)
+                                hit_t = any(f >= target for f in future)
+                                hit_s = any(f <= stop for f in future)
+                            else:
+                                target = entry * (1 - min(potential, 5.0)/100)
+                                stop = entry * (1 + base_stop_pct/100)
+                                hit_t = any(f <= target for f in future)
+                                hit_s = any(f >= stop for f in future)
+                            if hit_t and not hit_s:
+                                wins += 1
+                            elif hit_s and not hit_t:
+                                losses += 1
+                    total = wins + losses
+                    if total > 0:
+                        results.append({'symbol': symbol.replace('.NS',''), 'win_rate': wins/total*100, 'wins': wins, 'losses': losses})
+                except Exception:
+                    continue
+            return results
+        except Exception:
+            return []
     def generate_performance_report(self):
         """Generate performance report"""
         if not self.performance_data:
@@ -2478,15 +3239,24 @@ def main():
                     try:
                         selection = input("Enter trade numbers (comma-separated) or 'all': ").strip()
                         if selection.lower() == 'all':
-                            trades_to_execute = bullish + bearish
+                            trades_to_execute = []
+                            for t in bullish + bearish:
+                                if trader.can_execute_trade(t):
+                                    trades_to_execute.append(t)
                         else:
                             indices = [int(x.strip()) - 1 for x in selection.split(',')]
                             all_trades = bullish + bearish
-                            trades_to_execute = [all_trades[i] for i in indices if i < len(all_trades)]
+                            trades_to_execute = []
+                            for i in indices:
+                                if i < len(all_trades):
+                                    t = all_trades[i]
+                                    if trader.can_execute_trade(t):
+                                        trades_to_execute.append(t)
                         
                         executed_count = 0
                         for trade in trades_to_execute:
                             if trader.execute_paper_trade(trade):
+                                trader.last_trade_time[trade.get('symbol')] = datetime.now()
                                 executed_count += 1
                         print(f"✅ Executed {executed_count} paper trades")
                         
@@ -2564,14 +3334,39 @@ def main():
             continue
 
 if __name__ == "__main__":
-    # Install required packages
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=["interactive","swing","intraday"], default="interactive")
+    parser.add_argument("--data_source", choices=["yahoo","kite"], default="yahoo")
+    parser.add_argument("--paper", choices=["true","false"], default="true")
+    parser.add_argument("--live", action="store_true", help="Enable LIVE trading (Real Money)")
+    parser.add_argument("--max_symbols", type=int, default=20)
+    args, extra = parser.parse_known_args()
     try:
         import schedule
     except ImportError:
-        print("📦 Installing required packages...")
         import subprocess
         import sys
         subprocess.check_call([sys.executable, "-m", "pip", "install", "schedule"])
         import schedule
+        
+    live_mode = args.live or (args.paper == "false")
+    trader = UltimateFNOTrader(live_mode=live_mode)
     
-    main()
+    if args.data_source == "kite" or live_mode:
+        trader.init_kite_live()
+        
+    if args.mode == "intraday":
+        if args.data_source == "kite":
+            bulls, bears = trader.intraday_scan_live_refresh(max_symbols=args.max_symbols)
+        else:
+            bulls, bears = trader.intraday_scan()
+        if bulls or bears:
+            for t in bulls + bears:
+                trader.execute_paper_trade(t) # Will redirect to live if live_mode is True
+    elif args.mode == "swing":
+        bulls, bears = trader.ultimate_dual_side_scan()
+        if bulls or bears:
+            for t in bulls + bears:
+                trader.execute_paper_trade(t) # Will redirect to live if live_mode is True
+    else:
+        main()

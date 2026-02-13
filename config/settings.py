@@ -19,7 +19,7 @@ class DatabaseConfig:
     HOST = os.getenv('DB_HOST', 'localhost')
     PORT = int(os.getenv('DB_PORT', 5432))
     USER = os.getenv('DB_USER', 'trader')
-    PASSWORD = os.getenv('DB_PASSWORD', 'secure_password')
+    PASSWORD = os.getenv('DB_PASSWORD')
     DATABASE = os.getenv('DB_NAME', 'trading_bot')
 
     @property

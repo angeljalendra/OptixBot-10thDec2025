@@ -28,6 +28,16 @@
     <tbody></tbody>
   </table>
 
+  <h2>Commodity Signals (MCX)</h2>
+  <table id="commodity_signals">
+    <thead>
+      <tr>
+        <th>Time</th><th>Symbol</th><th>Instr</th><th>Direction</th><th>Entry</th><th>Target</th><th>SL</th><th>Confidence</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
   <h2>Positions</h2>
   <table id="positions">
     <thead>
@@ -45,23 +55,27 @@
     socket.on('disconnect', () => { statusEl.textContent = 'Disconnected'; });
 
     const signalsBody = document.querySelector('#signals tbody');
+    const commSignalsBody = document.querySelector('#commodity_signals tbody');
     const positionsBody = document.querySelector('#positions tbody');
 
     function fmt(v) { return typeof v === 'number' ? v.toFixed(2) : (v || ''); }
 
     socket.on('signal', (s) => {
+      const targetBody = (s.market === 'MCX') ? commSignalsBody : signalsBody;
       const tr = document.createElement('tr');
+      const instr = s.instrument_type || '';
       tr.innerHTML = `
         <td>${new Date().toLocaleTimeString()}</td>
         <td>${s.symbol || ''}</td>
+        <td>${instr}</td>
         <td>${s.direction || ''}</td>
         <td>${fmt(s.entry_price || s.entry)}</td>
         <td>${fmt(s.target_price || s.target)}</td>
         <td>${fmt(s.stop_loss || s.stop_loss_premium)}</td>
         <td>${fmt(s.confidence)}</td>
       `;
-      signalsBody.prepend(tr);
-      while (signalsBody.rows.length > 50) signalsBody.deleteRow(50);
+      targetBody.prepend(tr);
+      while (targetBody.rows.length > 50) targetBody.deleteRow(50);
     });
 
     socket.on('position', (p) => {

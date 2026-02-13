@@ -125,3 +125,39 @@ class TechnicalIndicators:
                 pass
         cp = self.get_current_price()
         return [cp + random.uniform(-1, 1) for _ in range(window)]
+
+    def calculate_adx(self, period: int = 14) -> float:
+        s = pd.Series(self._series(period * 3))
+        if len(s) < period + 1:
+            return 20.0
+        diff = s.diff()
+        plus_dm = diff.clip(lower=0)
+        minus_dm = (-diff).clip(lower=0)
+        tr = diff.abs()
+        plus_di = plus_dm.rolling(period).sum() / tr.rolling(period).sum()
+        minus_di = minus_dm.rolling(period).sum() / tr.rolling(period).sum()
+        dx = (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
+        adx = dx.rolling(period).mean().iloc[-1]
+        return float(round((adx if np.isfinite(adx) else 0.2) * 100.0, 2))
+
+    def calculate_sma_slope(self, period: int = 50, window: int = 10) -> float:
+        s = pd.Series(self._series(period + window))
+        if len(s) < period + window:
+            return 0.0
+        sma = s.rolling(period).mean().dropna()
+        y = sma.tail(window).values
+        x = np.arange(len(y))
+        if len(y) < 2:
+            return 0.0
+        m = float(np.polyfit(x, y, 1)[0])
+        return round(m, 4)
+
+    def calculate_trend_persistence(self, window: int = 20) -> float:
+        s = pd.Series(self._series(window + 50))
+        if len(s) < window + 50:
+            return 0.5
+        sma50 = s.rolling(50).mean()
+        last = s.tail(window)
+        ref = sma50.tail(window)
+        above = (last > ref).sum()
+        return round(above / max(window, 1), 2)

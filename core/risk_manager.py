@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from config.settings import Settings, get_config
 from core.logger import Logger
 
@@ -121,3 +121,49 @@ class EliteRiskManager:
         """
         # This would be implemented with actual price data
         return 0.0
+class RiskManager:
+    def __init__(self, session, config=None):
+        self.session = session
+        try:
+            self.config = config or get_config()
+        except Exception:
+            self.config = {}
+        self._elite = EliteRiskManager(session, self.config)
+
+    def validate_signal_info(self, signal: Dict) -> Tuple[bool, Dict]:
+        try:
+            min_conf = float(self.config.get('min_confidence', 8.0))
+        except Exception:
+            min_conf = 8.0
+        try:
+            min_rr = float(self.config.get('min_rr_ratio', 2.0))
+        except Exception:
+            min_rr = 2.0
+        spread_ok = float(signal.get('bid_ask_spread', 99)) <= float(self.config.get('max_spread', 10.0))
+        premium_ok = float(signal.get('premium', 0)) >= float(self.config.get('min_premium', 10.0))
+        conf_ok = float(signal.get('confidence', 0)) >= min_conf
+        rr_ok = float(signal.get('reward_risk_ratio', 0)) >= min_rr
+        vol = float(signal.get('volatility', 20))
+        vol_ok = float(self.config.get('min_volatility', 8.0)) <= vol <= float(self.config.get('max_volatility', 50.0))
+        checks = {
+            'confidence': conf_ok,
+            'rr_ratio': rr_ok,
+            'bid_ask_spread': spread_ok,
+            'premium_minimum': premium_ok,
+            'volatility': vol_ok
+        }
+        is_ok = all(checks.values())
+        if not is_ok and bool(self.config.get('elite_mode', False)):
+            return self._elite.validate_signal_elite(signal)
+        return is_ok, checks
+
+    def validate_signals_batch(self, signals: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+        valid = []
+        rejected = []
+        for s in signals:
+            ok, _ = self.validate_signal_info(s)
+            if ok:
+                valid.append(s)
+            else:
+                rejected.append(s)
+        return valid, rejected

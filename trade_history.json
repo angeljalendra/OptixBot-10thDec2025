@@ -1,0 +1,10 @@
+{
+  "trade_log": [],
+  "performance_data": [],
+  "paper_portfolio": {
+    "cash": 100000,
+    "positions": {},
+    "total_value": 100000
+  },
+  "last_updated": "2025-12-12 01:50:00"
+}

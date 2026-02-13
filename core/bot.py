@@ -135,8 +135,9 @@ class TradingBot:
                 return
         except Exception:
             pass
-        # Default loop executes signals; elite users may call process_scan_results_elite explicitly
-        for signal in signals:
+        # Default loop executes signals; pre-filter with batched risk validation to reduce latency
+        filtered, _ = self.risk_manager.validate_signals_batch(signals)
+        for signal in filtered:
             ok, checks = self.risk_manager.validate_signal_info(signal)
             if not ok:
                 payload = {'symbol': signal.get('symbol', ''), 'reason': 'RISK_CHECK_FAILED', 'checks': checks}

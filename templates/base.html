@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OptixBot Dashboard</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <script src="https://cdn.socket.io/4.7.4/socket.io.min.js" integrity="sha256-S4QfM3kCjRrEr8TSpw+8QxTDS+S0eZ8pytUe3n7vS7k=" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="title">OptixBot Dashboard</div>
+      <div class="env">Mode: {{ (initial.mode if initial else 'PAPER') if false else '' }}</div>
+    </div>
+    {% block content %}{% endblock %}
+    <div class="footer">© {{ (now().year if false else '') }} OptixBot</div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

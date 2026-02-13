@@ -1,0 +1,145 @@
+//@version=5
+strategy("RANA1CR2026: GOLD/SILVER PRO SCALPER - NATIVE ALERTS", overlay=true, calc_on_every_tick=true, process_orders_on_close=false, pyramiding=1)
+
+// ======================== SETTINGS ========================
+settingsGroup = "⚙️ Settings"
+maxTradesDay = input.int(10, "Max Trades Per Day", minval=1, maxval=10, group=settingsGroup)
+startHour = input.int(9, "Start Hour", minval=0, maxval=23, group=settingsGroup)
+endHour = input.int(22, "End Hour", minval=0, maxval=23, group=settingsGroup)
+minBarsBetweenTrades = input.int(5, "Min Bars Between Trades", minval=1, maxval=20, group=settingsGroup)
+
+// ======================== FILTERS ========================
+filterGroup = "🎯 Signal Filters"
+useVolumeFilter = input.bool(true, "Use Volume Filter", group=filterGroup)
+useTrendFilter = input.bool(true, "Use Trend Filter", group=filterGroup)
+useConfirmation = input.bool(true, "Require 2+ Confirmations", group=filterGroup)
+
+// ======================== ALERT SETTINGS ========================
+alertGroup = "🔔 Alert Settings"
+enableEarlyWarning = input.bool(true, "Enable Early Warning Alerts (1 confirmation)", group=alertGroup, tooltip="Get notified before trade executes")
+enableTradeAlerts = input.bool(true, "Enable Trade Execution Alerts (2+ confirmations)", group=alertGroup, tooltip="Alert when trade actually executes")
+showAlertOnChart = input.bool(true, "Show Alert Markers on Chart", group=alertGroup)
+
+// ======================== INDICATORS ========================
+ema5 = ta.ema(close, 5)
+ema9 = ta.ema(close, 9)
+ema13 = ta.ema(close, 13)
+ema21 = ta.ema(close, 21)
+ema50 = ta.ema(close, 50)
+vwapVal = ta.vwap(close)
+rsiVal = ta.rsi(close, 14)
+[macdLine, signalLine, _] = ta.macd(close, 12, 26, 9)
+stochK = ta.stoch(close, high, low, 14)
+stochD = ta.sma(stochK, 3)
+avgVolume = ta.sma(volume, 20)
+volumeOK = volume > avgVolume * 0.8
+[diPlus, diMinus, adx] = ta.dmi(14, 14)
+
+// ======================== SESSION LOGIC ========================
+var int tradesCount = 0
+var int lastTradeBar = 0
+if ta.change(time("D"))
+    tradesCount := 0
+currentHour = hour(time)
+isMarketOpen = currentHour >= startHour and currentHour < endHour
+canTrade = tradesCount < maxTradesDay and isMarketOpen and (bar_index - lastTradeBar >= minBarsBetweenTrades)
+
+// ======================== TREND CONTEXT ========================
+trendUp = ema9 > ema21 and ema21 > ema50
+trendDown = ema9 < ema21 and ema21 < ema50
+neutralTrend = not trendUp and not trendDown
+trendText = trendUp ? "UPTREND" : trendDown ? "DOWNTREND" : "NEUTRAL"
+
+// ======================== LONG SIGNALS ========================
+emaCrossLong = ta.crossover(ema5, ema13) and close > ema21 and rsiVal > 35
+pullbackLong = low <= ema13 and close > ema13 and close > open and rsiVal > 35 and rsiVal < 65
+vwapBounceLong = low <= vwapVal and close > vwapVal and close > open and rsiVal > 35
+momentumLong = close > high[1] and close > ema9 and macdLine > signalLine and stochK > 25 and stochK < 75
+reversalLong = rsiVal < 35 and close > open and close > ema5 and (stochK < 30 or ta.crossover(stochK, 20))
+longConfCount = (emaCrossLong ? 1 : 0) + (pullbackLong ? 1 : 0) + (vwapBounceLong ? 1 : 0) + (momentumLong ? 1 : 0) + (reversalLong ? 1 : 0)
+longSignalType = emaCrossLong ? "EMA_CROSS" : pullbackLong ? "PULLBACK" : vwapBounceLong ? "VWAP_BOUNCE" : momentumLong ? "MOMENTUM" : reversalLong ? "REVERSAL" : "MULTI"
+
+// ======================== SHORT SIGNALS ========================
+emaCrossShort = ta.crossunder(ema5, ema13) and close < ema21 and rsiVal < 65
+pullbackShort = high >= ema13 and close < ema13 and close < open and rsiVal < 65 and rsiVal > 35
+vwapRejectShort = high >= vwapVal and close < vwapVal and close < open and rsiVal < 65
+momentumShort = close < low[1] and close < ema9 and macdLine < signalLine and stochK > 25 and stochK < 75
+reversalShort = rsiVal > 65 and close < open and close < ema5 and (stochK > 70 or ta.crossunder(stochK, 80))
+shortConfCount = (emaCrossShort ? 1 : 0) + (pullbackShort ? 1 : 0) + (vwapRejectShort ? 1 : 0) + (momentumShort ? 1 : 0) + (reversalShort ? 1 : 0)
+shortSignalType = emaCrossShort ? "EMA_CROSS" : pullbackShort ? "PULLBACK" : vwapRejectShort ? "VWAP_REJECT" : momentumShort ? "MOMENTUM" : reversalShort ? "REVERSAL" : "MULTI"
+
+// ======================== SIGNAL LOGIC ========================
+minConfirmations = useConfirmation ? 2 : 1
+longSignalRaw = longConfCount >= minConfirmations
+shortSignalRaw = shortConfCount >= minConfirmations
+earlyLongSignal = longConfCount >= 1 and longConfCount < minConfirmations
+earlyShortSignal = shortConfCount >= 1 and shortConfCount < minConfirmations
+longSignal = longSignalRaw
+shortSignal = shortSignalRaw
+if useTrendFilter
+    longSignal := longSignal and (trendUp or (neutralTrend and close > ema50))
+    shortSignal := shortSignal and (trendDown or (neutralTrend and close < ema50))
+if useVolumeFilter
+    longSignal := longSignal and volumeOK
+    shortSignal := shortSignal and volumeOK
+buySignal = canTrade and longSignal
+sellSignal = canTrade and shortSignal
+earlyBuyWarning = canTrade and earlyLongSignal and not longSignal
+earlySellWarning = canTrade and earlyShortSignal and not shortSignal
+
+// ======================== ALERT MESSAGES ========================
+priceStr = str.tostring(close, "#.##")
+rsiStr = str.tostring(rsiVal, "#.#")
+volRatio = str.tostring(volume / avgVolume, "#.##")
+timeStr = str.format("{0,time,HH:mm}", time)
+longAlertMsg = "🟢 LONG EXECUTED | " + syminfo.ticker + " | Price: " + priceStr + " | Type: " + longSignalType + " | Conf: " + str.tostring(longConfCount) + "/5 | RSI: " + rsiStr + " | Trend: " + trendText + " | Vol: " + volRatio + "x | Time: " + timeStr + " | Trade: " + str.tostring(tradesCount + 1) + "/" + str.tostring(maxTradesDay)
+shortAlertMsg = "🔴 SHORT EXECUTED | " + syminfo.ticker + " | Price: " + priceStr + " | Type: " + shortSignalType + " | Conf: " + str.tostring(shortConfCount) + "/5 | RSI: " + rsiStr + " | Trend: " + trendText + " | Vol: " + volRatio + "x | Time: " + timeStr + " | Trade: " + str.tostring(tradesCount + 1) + "/" + str.tostring(maxTradesDay)
+earlyLongMsg = "⚠️ EARLY LONG | " + syminfo.ticker + " | Price: " + priceStr + " | Type: " + longSignalType + " | Conf: " + str.tostring(longConfCount) + "/5 | RSI: " + rsiStr + " | Trend: " + trendText + " | Vol: " + volRatio + "x | Time: " + timeStr + " | PENDING"
+earlyShortMsg = "⚠️ EARLY SHORT | " + syminfo.ticker + " | Price: " + priceStr + " | Type: " + shortSignalType + " | Conf: " + str.tostring(shortConfCount) + "/5 | RSI: " + rsiStr + " | Trend: " + trendText + " | Vol: " + volRatio + "x | Time: " + timeStr + " | PENDING"
+
+// ======================== EXECUTION WITH ALERTS ========================
+if buySignal
+    tradesCount += 1
+    lastTradeBar := bar_index
+    strategy.entry("LONG" + str.tostring(tradesCount), strategy.long, comment="🟢 LONG")
+    if enableTradeAlerts
+        alert(longAlertMsg, alert.freq_once_per_bar_close)
+if sellSignal
+    tradesCount += 1
+    lastTradeBar := bar_index
+    strategy.entry("SHORT" + str.tostring(tradesCount), strategy.short, comment="🔴 SHORT")
+    if enableTradeAlerts
+        alert(shortAlertMsg, alert.freq_once_per_bar_close)
+if earlyBuyWarning and enableEarlyWarning
+    alert(earlyLongMsg, alert.freq_once_per_bar)
+if earlySellWarning and enableEarlyWarning
+    alert(earlyShortMsg, alert.freq_once_per_bar)
+
+// ======================== PLOTS ========================
+plot(ema5, "EMA5", color=color.aqua, linewidth=1)
+plot(ema9, "EMA9", color=color.new(color.blue, 30), linewidth=1)
+plot(ema13, "EMA13", color=color.blue, linewidth=2)
+plot(ema21, "EMA21", color=color.yellow, linewidth=1)
+plot(ema50, "EMA50", color=color.orange, linewidth=2)
+plot(vwapVal, "VWAP", color=color.purple, style=plot.style_circles, linewidth=2)
+bgcolor(trendUp ? color.new(color.green, 92) : trendDown ? color.new(color.red, 92) : na)
+plotshape(buySignal and showAlertOnChart, title="BUY EXECUTED", location=location.belowbar, color=color.lime, style=shape.labelup, text="BUY", textcolor=color.black, size=size.normal)
+plotshape(sellSignal and showAlertOnChart, title="SELL EXECUTED", location=location.abovebar, color=color.red, style=shape.labeldown, text="SELL", textcolor=color.white, size=size.normal)
+plotshape(earlyBuyWarning and showAlertOnChart and enableEarlyWarning, title="EARLY LONG", location=location.belowbar, color=color.new(color.green, 50), style=shape.triangleup, text="", size=size.tiny)
+plotshape(earlySellWarning and showAlertOnChart and enableEarlyWarning, title="EARLY SHORT", location=location.abovebar, color=color.new(color.red, 50), style=shape.triangledown, text="", size=size.tiny)
+
+// ======================== INFO PANEL ========================
+var table infoTable = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 85), border_width=1, border_color=color.new(color.gray, 50))
+if barstate.islast
+    table.cell(infoTable, 0, 0, "📊 STATUS", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 70))
+    table.cell(infoTable, 1, 0, "", text_color=color.white, text_size=size.small, bgcolor=color.new(color.blue, 70))
+    table.cell(infoTable, 0, 1, "Trades", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 1, str.tostring(tradesCount) + "/" + str.tostring(maxTradesDay), text_color=tradesCount >= maxTradesDay ? color.red : color.lime, text_size=size.small)
+    table.cell(infoTable, 0, 2, "Trend", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 2, trendText, text_color=trendUp ? color.lime : trendDown ? color.red : color.yellow, text_size=size.small)
+    table.cell(infoTable, 0, 3, "RSI", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 3, str.tostring(rsiVal, "#.#"), text_color=rsiVal > 70 ? color.red : rsiVal < 30 ? color.lime : color.white, text_size=size.small)
+    table.cell(infoTable, 0, 4, "Volume", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 4, str.tostring(volume / avgVolume, "#.##") + "x", text_color=volumeOK ? color.lime : color.orange, text_size=size.small)
+    table.cell(infoTable, 0, 5, "Time", text_color=color.white, text_size=size.small)
+    table.cell(infoTable, 1, 5, str.format("{0,time,HH:mm}", time), text_color=color.white, text_size=size.small)

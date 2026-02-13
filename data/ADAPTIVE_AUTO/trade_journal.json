@@ -1,197 +1,70 @@
 {
-    "closed_trades": [],
-    "daily_pnl": {},
-    "recent_signals": [
-        {
-            "symbol": "TRENT",
-            "direction": "IRON_CONDOR",
-            "strike": 254100,
-            "premium": 106.85,
-            "entry": 4062.0,
-            "target": 3980.8,
-            "stop_loss": 4082.3,
-            "confidence": 8.0,
-            "risk_reward": 4.0,
-            "timestamp": "2025-12-10T13:29:18.107543",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
-        {
-            "symbol": "TVSMOTOR",
-            "direction": "IRON_CONDOR",
-            "strike": 253650,
-            "premium": 74.0,
-            "entry": 3626.0,
-            "target": 3553.5,
-            "stop_loss": 3644.1,
-            "confidence": 8.0,
-            "risk_reward": 4.01,
-            "timestamp": "2025-12-10T13:29:20.853441",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
-        {
-            "symbol": "ULTRACEMCO",
-            "direction": "IRON_CONDOR",
-            "strike": 2511400,
-            "premium": 138.0,
-            "entry": 11376.0,
-            "target": 11148.5,
-            "stop_loss": 11432.9,
-            "confidence": 8.0,
-            "risk_reward": 4.0,
-            "timestamp": "2025-12-10T13:29:23.579666",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
-        {
-            "symbol": "UNIONBANK",
-            "direction": "IRON_CONDOR",
-            "strike": 25150,
-            "premium": 4.3,
-            "entry": 148.78,
-            "target": 145.8,
-            "stop_loss": 149.5,
-            "confidence": 8.0,
-            "risk_reward": 4.14,
-            "timestamp": "2025-12-10T13:29:26.352966",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
-        {
-            "symbol": "VBL",
-            "direction": "IRON_CONDOR",
-            "strike": 25450,
-            "premium": 2.9,
-            "entry": 473.2,
-            "target": 463.7,
-            "stop_loss": 475.6,
-            "confidence": 8.0,
-            "risk_reward": 3.96,
-            "timestamp": "2025-12-10T13:29:29.068415",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
-        {
-            "symbol": "VOLTAS",
-            "direction": "IRON_CONDOR",
-            "strike": 251340,
-            "premium": 30.45,
-            "entry": 1341.2,
-            "target": 1314.4,
-            "stop_loss": 1347.9,
-            "confidence": 8.0,
-            "risk_reward": 4.0,
-            "timestamp": "2025-12-10T13:29:31.809534",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
-        {
-            "symbol": "ZYDUSLIFE",
-            "direction": "IRON_CONDOR",
-            "strike": 25950,
-            "premium": 24.2,
-            "entry": 929.45,
-            "target": 910.9,
-            "stop_loss": 934.1,
-            "confidence": 8.0,
-            "risk_reward": 3.99,
-            "timestamp": "2025-12-10T13:29:34.545635",
-            "status": "PENDING",
-            "pending_reason": "quality_gates",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "confidence": false,
-                "rr_ratio": true,
-                "liquidity": true
-            }
-        },
+    "closed_trades": [
         {
             "symbol": "ABB",
-            "direction": "BULLISH",
-            "strike": 255200,
-            "premium": 80.55,
-            "entry": 5159.5,
-            "target": 5469.1,
-            "stop_loss": 5133.7,
-            "confidence": 10.0,
-            "risk_reward": 12.0,
-            "timestamp": "2025-12-10T13:35:32.389911",
-            "status": "PENDING",
-            "pending_reason": "position_already_open",
-            "source_strategy": "ADAPTIVE_AUTO"
+            "option_type": "CALL",
+            "strike_price": 255200,
+            "entry_time": "2025-12-10 13:35:33",
+            "exit_time": "2025-12-16T12:26:35.914429",
+            "entry_price": 80.55,
+            "exit_price": 125.55,
+            "quantity": 29,
+            "lot_size": 125,
+            "pnl": 101250.0,
+            "reason": "QUICK BOOK",
+            "strategy": "COMMODITY_TREND",
+            "confidence": 10.0
         },
         {
             "symbol": "AMBER",
-            "direction": "BEARISH",
-            "strike": 256700,
-            "premium": 249.85,
-            "entry": 6659.0,
-            "target": 6259.5,
-            "stop_loss": 6692.3,
-            "confidence": 10.0,
-            "risk_reward": 12.0,
-            "timestamp": "2025-12-10T13:35:40.887827",
-            "status": "PENDING",
-            "pending_reason": "position_already_open",
-            "source_strategy": "ADAPTIVE_AUTO"
+            "option_type": "PUT",
+            "strike_price": 256700,
+            "entry_time": "2025-12-10 13:35:45",
+            "exit_time": "2025-12-16T12:26:37.287126",
+            "entry_price": 249.85,
+            "exit_price": 102.45,
+            "quantity": 1,
+            "lot_size": 100,
+            "pnl": -14740.0,
+            "reason": "PNL STOP LOSS (59.0%)",
+            "strategy": "COMMODITY_TREND",
+            "confidence": 10.0
         },
         {
-            "symbol": "APLAPOLLO",
-            "direction": "BEARISH",
-            "strike": 251740,
-            "premium": 28.0,
-            "entry": 1734.9,
-            "target": 1630.8,
-            "stop_loss": 1743.6,
-            "confidence": 10.0,
-            "risk_reward": 11.97,
-            "timestamp": "2025-12-10T13:35:51.889080",
-            "status": "PENDING",
-            "pending_reason": "max_signals_reached_bearish",
-            "source_strategy": "ADAPTIVE_AUTO",
-            "pending_reason_detail": {
-                "side": "bearish",
-                "side_count": 2,
-                "max_signals": 1
-            }
+            "symbol": "ABB",
+            "option_type": "CALL",
+            "strike_price": 255200,
+            "entry_time": "2025-12-10 13:35:33",
+            "exit_time": "2025-12-16T12:26:38.633358",
+            "entry_price": 80.55,
+            "exit_price": 125.55,
+            "quantity": 18,
+            "lot_size": 125,
+            "pnl": 61875.0,
+            "reason": "PORTFOLIO TSL",
+            "strategy": "COMMODITY_TREND",
+            "confidence": 10.0
         },
+        {
+            "symbol": "ABB",
+            "option_type": "CALL",
+            "strike_price": 255200,
+            "entry_time": "2025-12-10 13:35:33",
+            "exit_time": "2025-12-16T12:26:38.641034",
+            "entry_price": 80.55,
+            "exit_price": 125.55,
+            "quantity": 18,
+            "lot_size": 125,
+            "pnl": 101250.0,
+            "reason": "QUICK CASH TARGET HIT (\u20b920,000)",
+            "strategy": "COMMODITY_TREND",
+            "confidence": 10.0
+        }
+    ],
+    "daily_pnl": {
+        "2025-12-16": 249635.0
+    },
+    "recent_signals": [
         {
             "symbol": "ASTRAL",
             "direction": "BEARISH",
@@ -983,18 +856,216 @@
                 "min_rr_ratio": 2.2,
                 "position_open": false
             }
+        },
+        {
+            "symbol": "TCS",
+            "direction": "IRON_CONDOR",
+            "strike": 3200,
+            "premium": 0.0,
+            "entry": 3197.0,
+            "target": 3133.1,
+            "stop_loss": 3213.0,
+            "confidence": 7.5,
+            "risk_reward": 3.99,
+            "timestamp": "2026-01-14T18:54:15.416833",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "HINDUNILVR",
+            "direction": "IRON_CONDOR",
+            "strike": 2350,
+            "premium": 0.0,
+            "entry": 2350.0,
+            "target": 2303.0,
+            "stop_loss": 2363.1,
+            "confidence": 7.5,
+            "risk_reward": 3.59,
+            "timestamp": "2026-01-14T18:54:15.421298",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "AXISBANK",
+            "direction": "IRON_CONDOR",
+            "strike": 1300,
+            "premium": 0.0,
+            "entry": 1298.800048828125,
+            "target": 1272.8,
+            "stop_loss": 1306.6,
+            "confidence": 7.5,
+            "risk_reward": 3.33,
+            "timestamp": "2026-01-14T18:54:15.425544",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "BHARTIARTL",
+            "direction": "IRON_CONDOR",
+            "strike": 2000,
+            "premium": 0.0,
+            "entry": 2021.0,
+            "target": 1980.6,
+            "stop_loss": 2031.1,
+            "confidence": 7.5,
+            "risk_reward": 4.0,
+            "timestamp": "2026-01-14T18:54:15.428427",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "TATASTEEL",
+            "direction": "IRON_CONDOR",
+            "strike": 200,
+            "premium": 0.0,
+            "entry": 189.3699951171875,
+            "target": 185.6,
+            "stop_loss": 190.4,
+            "confidence": 7.5,
+            "risk_reward": 3.66,
+            "timestamp": "2026-01-14T18:54:15.430292",
+            "status": "PENDING",
+            "pending_reason": "confidence_below_min",
+            "source_strategy": "ADAPTIVE_AUTO"
+        },
+        {
+            "symbol": "TCS",
+            "direction": "IRON_CONDOR",
+            "strike": 3200,
+            "premium": 0.0,
+            "entry": 3197.0,
+            "target": 3133.1,
+            "stop_loss": 3213.0,
+            "confidence": 7.5,
+            "risk_reward": 3.99,
+            "timestamp": "2026-01-14T23:08:02.626277",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "HINDUNILVR",
+            "direction": "IRON_CONDOR",
+            "strike": 2350,
+            "premium": 0.0,
+            "entry": 2350.0,
+            "target": 2303.0,
+            "stop_loss": 2363.1,
+            "confidence": 7.5,
+            "risk_reward": 3.59,
+            "timestamp": "2026-01-14T23:08:02.631117",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "AXISBANK",
+            "direction": "IRON_CONDOR",
+            "strike": 1300,
+            "premium": 0.0,
+            "entry": 1298.800048828125,
+            "target": 1272.8,
+            "stop_loss": 1306.6,
+            "confidence": 7.5,
+            "risk_reward": 3.33,
+            "timestamp": "2026-01-14T23:08:02.634142",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "BHARTIARTL",
+            "direction": "IRON_CONDOR",
+            "strike": 2000,
+            "premium": 0.0,
+            "entry": 2021.0,
+            "target": 1980.6,
+            "stop_loss": 2031.1,
+            "confidence": 7.5,
+            "risk_reward": 4.0,
+            "timestamp": "2026-01-14T23:08:02.637243",
+            "status": "PENDING",
+            "pending_reason": "quality_gates",
+            "source_strategy": "ADAPTIVE_AUTO",
+            "pending_reason_detail": {
+                "confidence": false,
+                "rr_ratio": true,
+                "liquidity": true
+            }
+        },
+        {
+            "symbol": "TATASTEEL",
+            "direction": "IRON_CONDOR",
+            "strike": 200,
+            "premium": 0.0,
+            "entry": 189.3699951171875,
+            "target": 185.6,
+            "stop_loss": 190.4,
+            "confidence": 7.5,
+            "risk_reward": 3.66,
+            "timestamp": "2026-01-14T23:08:02.640752",
+            "status": "PENDING",
+            "pending_reason": "confidence_below_min",
+            "source_strategy": "ADAPTIVE_AUTO"
         }
     ],
     "performance_metrics": {
-        "win_rate": 0,
-        "avg_win": 0,
-        "avg_loss": 0,
-        "largest_win": 0,
-        "largest_loss": 0,
-        "total_trades": 0,
-        "profitable_trades": 0,
-        "profit_factor": 0,
+        "win_rate": 75.0,
+        "avg_win": 88125.0,
+        "avg_loss": -14740.0,
+        "largest_win": 101250.0,
+        "largest_loss": -14740.0,
+        "total_trades": 4,
+        "profitable_trades": 3,
+        "profit_factor": 17.935888738127545,
         "daily_pnl": 0
     },
-    "backtest_summary": {}
+    "backtest_summary": {
+        "summary": {
+            "timestamp": "2026-01-14T23:56:37.689128",
+            "symbols_tested": 0,
+            "avg_win_rate": 0,
+            "total_signals": 0
+        },
+        "details": []
+    }
 }

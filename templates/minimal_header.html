@@ -1,0 +1,420 @@
+<!-- Ultra Minimal Professional Header -->
+<header class="minimal-professional-header">
+    <div class="header-content">
+        <div class="logo-section">
+            <div class="logo-icon">
+                <span class="material-icons">trending_up</span>
+            </div>
+            <div class="logo-text">OptixTrader</div>
+        </div>
+        
+        <div class="header-stats">
+            <div class="stat-item">
+                <span class="stat-value" id="portfolioValue">₹5,50,000</span>
+                <span class="stat-label">Portfolio</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="todayPnL">₹0</span>
+                <span class="stat-label">Today</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="activePositions">0</span>
+                <span class="stat-label">Active</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="todayTradesCount">0</span>
+                <span class="stat-label">Trades</span>
+            </div>
+        </div>
+        
+        <div class="header-meta">
+            <span class="meta-item" id="currentStrategy">SOTD</span>
+            <span class="meta-separator">•</span>
+            <span class="meta-item" id="currentMode">PAPER</span>
+        </div>
+        
+        <div class="header-controls">
+            <div class="control-group">
+                <button id="ctrlStart" class="control-btn minimal" title="Start">
+                    <span class="material-icons">play_arrow</span>
+                </button>
+                <button id="ctrlStop" class="control-btn minimal" title="Stop">
+                    <span class="material-icons">stop</span>
+                </button>
+            </div>
+            
+            <div class="theme-toggle minimal" id="themeToggle">
+                <span class="theme-icon active" data-theme="dark">
+                    <span class="material-icons">dark_mode</span>
+                </span>
+                <span class="theme-icon" data-theme="light">
+                    <span class="material-icons">light_mode</span>
+                </span>
+            </div>
+            
+            <button id="settingsBtn" class="control-btn minimal" title="Settings">
+                <span class="material-icons">settings</span>
+            </button>
+        </div>
+    </div>
+</header>
+
+<!-- Settings Panel (Hidden by default) -->
+<div id="settingsPanel" class="settings-panel">
+    <div class="settings-content">
+        <div class="settings-header">
+            <h5>Settings</h5>
+            <button id="closeSettings" class="control-btn">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        <div class="settings-body">
+            <div class="setting-item">
+                <label>Theme Palette</label>
+                <select id="paletteSelect" class="control-select">
+                    <option value="dark" selected>Dark</option>
+                    <option value="light">Light</option>
+                    <option value="aurora">Aurora</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="mono">Mono</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>Compact Mode</label>
+                <input type="checkbox" id="compactToggle" class="setting-checkbox">
+            </div>
+            <div class="setting-item">
+                <label>Observe Only</label>
+                <input type="checkbox" id="observeToggle" class="setting-checkbox">
+            </div>
+            <div class="setting-item">
+                <label>Kite Token</label>
+                <input id="kiteTokenInput" class="control-input" placeholder="Enter Kite request_token">
+                <button id="kiteConnectBtn" class="control-btn primary">Connect</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Ultra Minimal Professional Header */
+.minimal-professional-header {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.minimal-professional-header.scrolled {
+    background: var(--bg-glass);
+    box-shadow: var(--shadow-heavy);
+    border-bottom-color: var(--border-glow);
+}
+
+.header-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-icon {
+    width: 28px;
+    height: 28px;
+    background: var(--gradient-primary);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.logo-icon:hover {
+    transform: scale(1.1);
+    box-shadow: var(--shadow-glow);
+}
+
+.logo-text {
+    font-size: 16px;
+    font-weight: 600;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+}
+
+.header-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.stat-item {
+    text-align: center;
+    position: relative;
+}
+
+.stat-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 1px;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 8px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+    opacity: 0.8;
+}
+
+.header-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.meta-item {
+    font-weight: 500;
+}
+
+.meta-separator {
+    opacity: 0.5;
+}
+
+.header-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.control-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.control-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.control-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+.control-btn.minimal {
+    background: transparent;
+    border: 1px solid var(--border-color);
+}
+
+.control-btn.minimal:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
+}
+
+.theme-toggle.minimal {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px;
+}
+
+.theme-toggle.minimal:hover {
+    border-color: var(--accent-primary);
+}
+
+/* Settings Panel */
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 400px;
+    height: 100vh;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border-color);
+    z-index: 2000;
+    transition: right 0.3s ease;
+    backdrop-filter: blur(20px);
+}
+
+.settings-panel.active {
+    right: 0;
+}
+
+.settings-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-header h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-body {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.setting-item {
+    margin-bottom: 24px;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-input {
+    width: 100%;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    margin-bottom: 8px;
+}
+
+.control-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-glow);
+    color: var(--text-primary);
+}
+
+.setting-checkbox {
+    width: auto;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent-primary);
+}
+
+.control-select {
+    width: 100%;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.control-select:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.control-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-glow);
+}
+
+.control-btn.primary {
+    background: var(--accent-primary);
+    color: white;
+    width: 100%;
+    margin-top: 8px;
+}
+
+.control-btn.primary:hover {
+    background: var(--accent-secondary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .minimal-professional-header {
+        padding: 10px 16px;
+    }
+    
+    .header-content {
+        gap: 12px;
+    }
+    
+    .logo-text {
+        font-size: 14px;
+    }
+    
+    .header-stats {
+        gap: 12px;
+    }
+    
+    .stat-value {
+        font-size: 11px;
+    }
+    
+    .stat-label {
+        font-size: 7px;
+    }
+    
+    .header-meta {
+        display: none;
+    }
+    
+    .control-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+    }
+    
+    .settings-panel {
+        width: 100%;
+        right: -100%;
+    }
+}
+</style>

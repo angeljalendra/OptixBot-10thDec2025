@@ -1,0 +1,751 @@
+<!-- Balanced Professional Header -->
+<header class="balanced-professional-header">
+    <div class="header-main">
+        <div class="logo-section">
+            <div class="logo-icon">
+                <span class="material-icons">trending_up</span>
+            </div>
+            <div class="logo-text">OptixTrader</div>
+        </div>
+        
+        <div class="header-stats">
+            <div class="stat-item">
+                <span class="stat-value" id="portfolioValue">₹5,50,000</span>
+                <span class="stat-label">Portfolio</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="todayPnL">₹0</span>
+                <span class="stat-label">Today</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="activePositions">0</span>
+                <span class="stat-label">Active</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="todayTradesCount">0</span>
+                <span class="stat-label">Trades</span>
+            </div>
+        </div>
+        
+        <div class="header-controls">
+            <div class="control-group">
+                <select id="modeSelect" class="control-select minimal">
+                    <option value="PAPER" selected>PAPER</option>
+                    <option value="LIVE">LIVE</option>
+                </select>
+                <select id="strategySelect" class="control-select minimal">
+                    <option value="SOTD_INTRADAY" selected>SOTD</option>
+                    <option value="GOLDMINI_PINE">GOLDMINI</option>
+                    <option value="HIGH_CONVICTION">HIGH</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <button id="ctrlStart" class="control-btn minimal success" title="Start Trading">
+                    <span class="material-icons">play_arrow</span>
+                </button>
+                <button id="ctrlStop" class="control-btn minimal danger" title="Stop Trading">
+                    <span class="material-icons">stop</span>
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <div class="theme-toggle minimal" id="themeToggle">
+                    <span class="theme-icon active" data-theme="dark">
+                        <span class="material-icons">dark_mode</span>
+                    </span>
+                    <span class="theme-icon" data-theme="light">
+                        <span class="material-icons">light_mode</span>
+                    </span>
+                </div>
+                <button id="settingsBtn" class="control-btn minimal" title="Settings">
+                    <span class="material-icons">settings</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="header-subbar">
+        <div class="subbar-content">
+            <div class="kite-connection">
+                <span class="connection-label">Kite:</span>
+                <span id="brokerStatusBadge" class="status-badge disconnected">Disconnected</span>
+                <button id="kiteConnectBtn" class="connect-btn">Connect</button>
+                <input id="kiteTokenInput" class="token-input" placeholder="Enter token" style="display: none;">
+            </div>
+            
+            <div class="system-status">
+                <span class="status-label">Bot:</span>
+                <span id="botStatusBadge" class="status-badge running">Running</span>
+            </div>
+            
+            <div class="quick-actions">
+                <button id="compactToggle" class="action-btn minimal" title="Compact Mode">
+                    <span class="material-icons">view_compact</span>
+                </button>
+                <button id="observeToggle" class="action-btn minimal" title="Observe Only">
+                    <span class="material-icons">visibility</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</header>
+
+<!-- Settings Panel (Hidden by default) -->
+<div id="settingsPanel" class="settings-panel">
+    <div class="settings-content">
+        <div class="settings-header">
+            <h5>Settings</h5>
+            <button id="closeSettings" class="control-btn minimal">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
+        <div class="settings-body">
+            <div class="setting-item">
+                <label>Theme Palette</label>
+                <select id="paletteSelect" class="control-select">
+                    <option value="dark" selected>Dark</option>
+                    <option value="light">Light</option>
+                    <option value="aurora">Aurora</option>
+                    <option value="ocean">Ocean</option>
+                    <option value="mono">Mono</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label>Position Sizer</label>
+                <div class="position-sizer-control">
+                    <input type="range" id="riskSlider" min="0.5" max="5" step="0.5" value="1" class="risk-slider">
+                    <span id="riskValue" class="risk-value">1.0%</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Auto Trading</label>
+                <div class="auto-trading-controls">
+                    <label class="switch">
+                        <input type="checkbox" id="autoTradingToggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="auto-trading-label">Enable Auto Trading</span>
+                </div>
+            </div>
+            <div class="setting-item">
+                <label>Notifications</label>
+                <div class="notification-controls">
+                    <label class="switch">
+                        <input type="checkbox" id="notificationsToggle" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="notification-label">Trade Notifications</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Balanced Professional Header */
+.balanced-professional-header {
+    background: rgba(10, 10, 15, 0.9);
+    backdrop-filter: blur(30px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+[data-theme="light"] .balanced-professional-header {
+    background: rgba(248, 250, 252, 0.95);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.balanced-professional-header.scrolled {
+    background: rgba(10, 10, 15, 0.95);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .balanced-professional-header.scrolled {
+    background: rgba(248, 250, 252, 0.98);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+}
+
+.header-main {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    gap: 20px;
+}
+
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.logo-icon:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+}
+
+.logo-text {
+    font-size: 16px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+}
+
+.header-stats {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.stat-item {
+    text-align: center;
+    position: relative;
+}
+
+.stat-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+    display: block;
+    margin-bottom: 2px;
+    line-height: 1;
+    letter-spacing: 0.3px;
+}
+
+[data-theme="light"] .stat-value {
+    color: #0f172a;
+}
+
+.stat-label {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+[data-theme="light"] .stat-label {
+    color: rgba(15, 23, 42, 0.7);
+}
+
+.header-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.control-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.control-btn.minimal {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .control-btn.minimal {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(15, 23, 42, 0.7);
+}
+
+.control-btn.minimal:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+    transform: translateY(-1px);
+}
+
+[data-theme="light"] .control-btn.minimal:hover {
+    background: rgba(0, 0, 0, 0.1);
+    color: rgba(15, 23, 42, 0.9);
+}
+
+.control-btn.minimal.success:hover {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.control-btn.minimal.danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.control-select.minimal {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 80px;
+    backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .control-select.minimal {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.control-select.minimal:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .control-select.minimal:hover {
+    border-color: rgba(99, 102, 241, 0.3);
+    color: rgba(15, 23, 42, 0.9);
+}
+
+.control-select.minimal:focus {
+    outline: none;
+    border-color: rgba(99, 102, 241, 0.8);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.theme-toggle.minimal {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .theme-toggle.minimal {
+    background: rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.theme-toggle.minimal:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+.theme-icon {
+    padding: 4px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+}
+
+[data-theme="light"] .theme-icon {
+    color: rgba(15, 23, 42, 0.6);
+}
+
+.theme-icon.active {
+    background: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+}
+
+.theme-icon:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .theme-icon:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(15, 23, 42, 0.9);
+}
+
+/* Header Subbar */
+.header-subbar {
+    background: rgba(255, 255, 255, 0.02);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 8px 24px;
+}
+
+[data-theme="light"] .header-subbar {
+    background: rgba(0, 0, 0, 0.01);
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.subbar-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.kite-connection {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.connection-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+[data-theme="light"] .connection-label {
+    color: rgba(15, 23, 42, 0.6);
+}
+
+.status-badge {
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: 1px solid;
+}
+
+.status-badge.running {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.status-badge.disconnected {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.status-badge.connected {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.connect-btn {
+    background: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 9px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.connect-btn:hover {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+.token-input {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 9px;
+    width: 120px;
+    transition: all 0.2s ease;
+}
+
+[data-theme="light"] .token-input {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.token-input:focus {
+    outline: none;
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.system-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-label {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 500;
+}
+
+[data-theme="light"] .status-label {
+    color: rgba(15, 23, 42, 0.6);
+}
+
+.quick-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.action-btn.minimal {
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    border: none;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 12px;
+}
+
+[data-theme="light"] .action-btn.minimal {
+    color: rgba(15, 23, 42, 0.6);
+}
+
+.action-btn.minimal:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .action-btn.minimal:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: rgba(15, 23, 42, 0.9);
+}
+
+/* Settings Panel */
+.settings-panel {
+    position: fixed;
+    top: 0;
+    right: -400px;
+    width: 400px;
+    height: 100vh;
+    background: var(--bg-card);
+    border-left: 1px solid var(--border-color);
+    z-index: 2000;
+    transition: right 0.3s ease;
+    backdrop-filter: blur(20px);
+}
+
+.settings-panel.active {
+    right: 0;
+}
+
+.settings-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-header h5 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-body {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.setting-item {
+    margin-bottom: 24px;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Position Sizer Control */
+.position-sizer-control {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.risk-slider {
+    flex: 1;
+    height: 4px;
+    background: var(--border-color);
+    border-radius: 2px;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.risk-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.risk-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 10px var(--accent-primary);
+}
+
+.risk-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 40px;
+    text-align: right;
+}
+
+/* Switch Control */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--border-color);
+    transition: 0.3s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--accent-primary);
+}
+
+input:checked + .slider:before {
+    transform: translateX(20px);
+}
+
+.auto-trading-label,
+.notification-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-left: 12px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .header-main {
+        padding: 10px 16px;
+        gap: 12px;
+    }
+    
+    .header-stats {
+        gap: 10px;
+    }
+    
+    .stat-value {
+        font-size: 11px;
+    }
+    
+    .control-select.minimal {
+        font-size: 10px;
+        padding: 6px 8px;
+        min-width: 70px;
+    }
+    
+    .control-btn.minimal {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+    
+    .subbar-content {
+        flex-direction: column;
+        gap: 12px;
+        align-items: stretch;
+    }
+    
+    .kite-connection {
+        justify-content: space-between;
+    }
+    
+    .system-status {
+        justify-content: center;
+    }
+    
+    .quick-actions {
+        justify-content: center;
+    }
+    
+    .settings-panel {
+        width: 100%;
+        right: -100%;
+    }
+}
+</style>

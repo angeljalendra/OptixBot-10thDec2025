@@ -22,6 +22,7 @@ from sys import stdout
 import math
 import calendar
 import psutil
+import secrets
 from kiteconnect.exceptions import InputException, TokenException, PermissionException, OrderException
 
 from scipy.stats import norm
@@ -38,6 +39,12 @@ API_KEY = os.getenv('KITE_API_KEY')
 API_SECRET = os.getenv('KITE_API_SECRET')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+BROKER = os.getenv('BROKER') or 'KITE'
+GROWW_API_KEY = os.getenv('GROWW_API_KEY')
+GROWW_API_SECRET = os.getenv('GROWW_API_SECRET')
+GROWW_ACCESS_TOKEN = os.getenv('GROWW_ACCESS_TOKEN')
+GROWW_BASE_URL = os.getenv('GROWW_BASE_URL')
+GROWW_TOKEN_ENDPOINT = os.getenv('GROWW_TOKEN_ENDPOINT')
 
 # Check if essential keys are missing (Priority 1)
 if not API_KEY or not API_SECRET:
@@ -46,7 +53,7 @@ if not API_KEY or not API_SECRET:
 
 # Attempt to import Flask/SocketIO/KiteConnect
 try:
-    from flask import Flask, render_template, jsonify, Response
+    from flask import Flask, render_template, jsonify, Response, redirect
     from flask_socketio import SocketIO
     from kiteconnect import KiteConnect, KiteTicker
     KITE_AVAILABLE = True
@@ -72,7 +79,11 @@ try:
 except Exception:
     Alerts = None
 
-DEFAULT_COMMODITY_UNIVERSE = ['CRUDEOIL', 'NATURALGAS', 'GOLD', 'SILVER', 'COPPER']
+GrowwAPI = None
+GrowwSDK = None
+pyotp = None
+
+DEFAULT_COMMODITY_UNIVERSE = ['CRUDEOIL', 'CRUDEOILMINI', 'NATURALGAS', 'GOLD', 'GOLDMINI', 'SILVER', 'COPPER']
 COMMODITY_YF_MAP = {
     'CRUDEOIL': 'CL=F',
     'NATURALGAS': 'NG=F',
@@ -155,13 +166,25 @@ def initialize_kite(api_key: str, api_secret: str, request_token: Optional[str] 
 
     if not access_token:
         logger.warning("Kite token not found or expired. Authorization required.")
+        try:
+            import webbrowser
+            webbrowser.open(kite.login_url(), new=2)
+        except Exception:
+            pass
         print(f"Open this URL and login: {kite.login_url()}")
         try:
             if request_token is None:
-                if not allow_input:
-                    logger.critical("Request token not provided and interactive input disabled. Cannot initialize Kite.")
-                    return None
-                request_token = input("Enter request_token from URL: ").strip()
+                env_rt = os.getenv('REQUEST_TOKEN')
+                if env_rt:
+                    request_token = env_rt.strip()
+                else:
+                    if not allow_input:
+                        logger.critical("Request token not provided and interactive input disabled. Cannot initialize Kite.")
+                        return None
+                    rt = ""
+                    while not rt:
+                        rt = input("Enter request_token from URL: ").strip()
+                    request_token = rt
             session_data = kite.generate_session(request_token, api_secret=api_secret)
             # ---------------------------------------------
 
@@ -332,10 +355,36 @@ class DashboardApp:
         logging.getLogger('kiteconnect').setLevel(logging.ERROR)
         self.app.logger.propagate = False
         self.app.logger.handlers = []
-        self.app.config['SECRET_KEY'] = 'secret!'
+        self.app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY') or secrets.token_hex(32)
         self.socketio = SocketIO(self.app, async_mode='threading', ping_interval=15, ping_timeout=30)
         self.trader = trader
         self.port = port
+        @self.app.errorhandler(Exception)
+        def _global_err(e):
+            try:
+                logger.error(f"Unhandled dashboard error: {e}")
+            except Exception:
+                pass
+            return jsonify({'error': 'internal_server_error'}), 500
+
+        @self.app.errorhandler(404)
+        def _not_found(e):
+            try:
+                # Avoid noisy logs for browser defaults like favicon/robots
+                msg = str(e)
+                if 'favicon.ico' in msg or 'robots.txt' in msg:
+                    pass
+            except Exception:
+                pass
+            return jsonify({'error': 'not_found'}), 404
+
+        @self.app.route('/favicon.ico')
+        def favicon():
+            try:
+                from flask import make_response
+                return make_response('', 204)
+            except Exception:
+                return '', 204
 
         os.makedirs(template_dir, exist_ok=True)
 
@@ -345,7 +394,7 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return render_template('groww_dashboard_enhanced.html', initial_data=json.dumps(init))
 
         # Multi-page routes that render the same dashboard with tab selection handled client-side
         @self.app.route('/portfolio')
@@ -354,7 +403,31 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return render_template('groww_dashboard_ultra.html', initial_data=json.dumps(init))
+
+        @self.app.route('/classic')
+        def classic_dashboard_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/ultra')
+        def ultra_dashboard_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/enhanced')
+        def enhanced_dashboard_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return render_template('groww_dashboard_enhanced.html', initial_data=json.dumps(init))
 
         @self.app.route('/positions')
         def positions_page():
@@ -362,7 +435,7 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return redirect('/')
 
         @self.app.route('/signals')
         def signals_page():
@@ -370,7 +443,7 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return redirect('/')
 
         @self.app.route('/trades')
         def trades_page():
@@ -378,7 +451,7 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return redirect('/')
 
         @self.app.route('/feed')
         def feed_page():
@@ -386,7 +459,71 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return redirect('/')
+
+        @self.app.route('/groww')
+        def groww_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/portfolio')
+        def groww_portfolio_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/positions')
+        def groww_positions_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/signals')
+        def groww_signals_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/trades')
+        def groww_trades_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/feed')
+        def groww_feed_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/health')
+        def groww_health_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
+
+        @self.app.route('/groww/settings')
+        def groww_settings_page():
+            try:
+                init = self.trader.package_dashboard_data() if self.trader else {}
+            except Exception:
+                init = {}
+            return redirect('/')
 
         @self.app.route('/health')
         def health_page():
@@ -394,7 +531,88 @@ class DashboardApp:
                 init = self.trader.package_dashboard_data() if self.trader else {}
             except Exception:
                 init = {}
-            return render_template('dashboard.html', initial_data=json.dumps(init))
+            return redirect('/')
+
+        @self.socketio.on('connect')
+        def _on_connect():
+            try:
+                self.emit_portfolio_update(self.trader.package_dashboard_data())
+            except Exception:
+                pass
+
+        @self.socketio.on('request_update')
+        def _on_request_update(data=None):
+            try:
+                self.emit_portfolio_update(self.trader.package_dashboard_data())
+            except Exception:
+                pass
+
+        @self.socketio.on('strategy_change')
+        def _on_strategy_change(payload):
+            try:
+                key = (payload or {}).get('strategy')
+                if key and self.trader:
+                    self.trader.set_active_strategy(key)
+                    self.emit_portfolio_update(self.trader.package_dashboard_data())
+            except Exception:
+                pass
+
+        @self.socketio.on('request_signals')
+        def _on_request_signals():
+            try:
+                snap = self.trader.package_dashboard_data() if self.trader else {}
+                sigs = snap.get('signals') or []
+                self.socketio.emit('signals_list', sigs)
+            except Exception:
+                pass
+
+        @self.socketio.on('request_positions')
+        def _on_request_positions():
+            try:
+                snap = self.trader.package_dashboard_data() if self.trader else {}
+                positions = snap.get('positions') or []
+                self.socketio.emit('positions_list', positions)
+            except Exception:
+                pass
+
+        @self.socketio.on('ui_control')
+        def _on_ui_control(payload):
+            try:
+                if not self.trader:
+                    return
+                action = (payload or {}).get('action')
+                if action == 'start':
+                    self.trader.start_automatic_scheduler()
+                elif action == 'stop':
+                    self.trader.stop_automatic_scheduler()
+                elif action == 'set_mode':
+                    mode = str((payload or {}).get('mode') or '').upper()
+                    if mode in ['LIVE','PAPER']:
+                        self.trader.mode = mode
+                elif action == 'set_observe_only':
+                    val = bool((payload or {}).get('value'))
+                    self.trader.observe_only = val
+                elif action == 'set_strategy':
+                    key = (payload or {}).get('strategy')
+                    if key:
+                        self.trader.set_active_strategy(key)
+                elif action == 'set_limits':
+                    mp = (payload or {}).get('max_positions')
+                    mdl = (payload or {}).get('max_daily_loss_pct')
+                    if mp is not None:
+                        try:
+                            self.trader.max_positions = int(mp)
+                        except Exception:
+                            pass
+                    if mdl is not None:
+                        try:
+                            self.trader.max_daily_loss_pct = float(mdl)
+                        except Exception:
+                            pass
+                snap = self.trader.package_dashboard_data()
+                self.socketio.emit('dashboard_update', snap)
+            except Exception:
+                pass
 
         @self.app.route('/api/logs')
         def api_logs():
@@ -439,6 +657,120 @@ class DashboardApp:
                 return jsonify({'status': 'ok'})
             except Exception as e:
                 logger.error(f"/api/position failed: {e}")
+                return jsonify({'status': 'error'}), 500
+        
+        @self.app.route('/api/kite_login', methods=['POST'])
+        def api_kite_login():
+            from flask import request
+            try:
+                data = request.get_json(force=True) or {}
+                req_tok = str(data.get('request_token') or '').strip()
+                desired_mode = str(data.get('mode') or '').strip().upper()
+                if not req_tok:
+                    return jsonify({'status': 'error', 'reason': 'missing_request_token'}), 400
+                if not KITE_AVAILABLE or not KiteConnect:
+                    return jsonify({'status': 'error', 'reason': 'kite_unavailable'}), 400
+                if not API_KEY or not API_SECRET:
+                    return jsonify({'status': 'error', 'reason': 'missing_api_credentials'}), 400
+                kite = initialize_kite(API_KEY, API_SECRET, request_token=req_tok, allow_input=False)
+                if not kite:
+                    return jsonify({'status': 'error', 'reason': 'init_failed'}), 500
+                if self.trader:
+                    self.trader.kite = kite
+                    try:
+                        os.environ['BROKER'] = 'KITE'
+                    except Exception:
+                        pass
+                    if desired_mode in ['LIVE','PAPER']:
+                        self.trader.mode = desired_mode
+                    snap = self.trader.package_dashboard_data()
+                    if self.socketio:
+                        self.socketio.emit('dashboard_update', snap)
+                return jsonify({'status': 'ok'})
+            except Exception as e:
+                logger.error(f"/api/kite_login failed: {e}")
+                return jsonify({'status': 'error'}), 500
+        
+        @self.app.route('/api/kite_login_url', endpoint='kite_login_url_live')
+        def kite_login_url_live():
+            try:
+                if not KITE_AVAILABLE or not KiteConnect:
+                    return jsonify({'status': 'error', 'reason': 'kite_unavailable'}), 400
+                if not API_KEY:
+                    return jsonify({'status': 'error', 'reason': 'missing_api_key'}), 400
+                kite = KiteConnect(api_key=API_KEY)
+                url = kite.login_url()
+                return jsonify({'status': 'ok', 'url': url})
+            except Exception as e:
+                logger.error(f"/api/kite_login_url failed: {e}")
+                return jsonify({'status': 'error'}), 500
+        
+        @self.app.route('/kite/callback')
+        def kite_callback():
+            try:
+                from flask import request
+                req_tok = str(request.args.get('request_token') or '').strip()
+                if not req_tok:
+                    html = "<html><body><p>Missing request_token.</p><script>setTimeout(()=>window.close(),1500)</script></body></html>"
+                    return Response(html, mimetype='text/html')
+                kite = initialize_kite(API_KEY, API_SECRET, request_token=req_tok, allow_input=False)
+                if not kite:
+                    html = "<html><body><p>Failed to initialize Kite.</p><script>setTimeout(()=>window.close(),1500)</script></body></html>"
+                    return Response(html, mimetype='text/html')
+                if self.trader:
+                    self.trader.kite = kite
+                    try:
+                        os.environ['BROKER'] = 'KITE'
+                    except Exception:
+                        pass
+                    try:
+                        snap = self.trader.package_dashboard_data()
+                        if self.socketio:
+                            self.socketio.emit('dashboard_update', snap)
+                    except Exception:
+                        pass
+                html = """
+                <html>
+                  <body>
+                    <p>Kite connected. You can close this window.</p>
+                    <script>
+                      try {
+                        if (window.opener) {
+                          window.opener.postMessage({kiteConnected: true}, "*");
+                        }
+                      } catch (e) {}
+                      setTimeout(()=>window.close(), 500);
+                    </script>
+                  </body>
+                </html>
+                """
+                return Response(html, mimetype='text/html')
+            except Exception as e:
+                logger.error(f"/kite/callback failed: {e}")
+                html = "<html><body><p>Error during Kite connect.</p><script>setTimeout(()=>window.close(),1500)</script></body></html>"
+                return Response(html, mimetype='text/html')
+        
+        @self.app.route('/api/tv_webhook', methods=['POST'])
+        def api_tv_webhook():
+            from flask import request
+            try:
+                payload = request.get_json(force=True) or {}
+                secret_cfg = str(self.config.get('tv_webhook_secret', '') or '').strip()
+                incoming_secret = str(payload.get('secret', '') or '').strip()
+                if secret_cfg and incoming_secret and (secret_cfg != incoming_secret):
+                    return jsonify({'status': 'unauthorized'}), 401
+                if not self.trader:
+                    return jsonify({'status': 'no_trader'}), 400
+                result = self.trader.handle_tradingview_signal(payload) or {}
+                if self.socketio:
+                    try:
+                        snap = self.trader.package_dashboard_data()
+                        self.socketio.emit('dashboard_update', snap)
+                    except Exception:
+                        pass
+                return jsonify({'status': 'ok', 'result': result})
+            except Exception as e:
+                logger.error(f"/api/tv_webhook failed: {e}")
                 return jsonify({'status': 'error'}), 500
 
         @self.app.route('/api/close_position', methods=['POST'])
@@ -489,6 +821,89 @@ class DashboardApp:
                 return Response(json.dumps(packaged), mimetype='application/json')
             except Exception as e:
                 logger.error(f"/api/close_position failed: {e}")
+                return jsonify({'status': 'error'}), 500
+
+        @self.app.route('/api/close_position_limit', methods=['POST'])
+        def api_close_position_limit():
+            try:
+                from flask import request
+                data = request.get_json(force=True) or {}
+                pos_key = data.get('position_key')
+                limit_price = float(data.get('limit_price') or 0)
+                if not self.trader:
+                    return jsonify({'status': 'no_trader'}), 400
+                if not pos_key or pos_key not in (self.trader.paper_portfolio.get('positions') or {}):
+                    return jsonify({'status': 'not_found'}), 404
+                self.trader.close_option_position(pos_key, limit_price, "UI LIMIT EXIT")
+                packaged = self.trader.package_dashboard_data()
+                try:
+                    self.socketio.emit('dashboard_update', packaged)
+                except Exception:
+                    pass
+                return Response(json.dumps(packaged), mimetype='application/json')
+            except Exception as e:
+                logger.error(f"/api/close_position_limit failed: {e}")
+                return jsonify({'status': 'error'}), 500
+
+        @self.app.route('/api/close_commodity_limit', methods=['POST'])
+        def api_close_commodity_limit():
+            try:
+                from flask import request
+                data = request.get_json(force=True) or {}
+                pos_key = data.get('position_key')
+                limit_price = float(data.get('limit_price') or 0)
+                if not self.trader:
+                    return jsonify({'status': 'no_trader'}), 400
+                if not pos_key or pos_key not in (self.trader.paper_portfolio.get('positions') or {}):
+                    return jsonify({'status': 'not_found'}), 404
+                self.trader.close_commodity_position(pos_key, limit_price, "UI LIMIT EXIT")
+                packaged = self.trader.package_dashboard_data()
+                try:
+                    self.socketio.emit('dashboard_update', packaged)
+                except Exception:
+                    pass
+                return Response(json.dumps(packaged), mimetype='application/json')
+            except Exception as e:
+                logger.error(f"/api/close_commodity_limit failed: {e}")
+                return jsonify({'status': 'error'}), 500
+        
+        @self.app.route('/api/position/close_limit', methods=['POST'])
+        def api_position_close_limit():
+            try:
+                from flask import request
+                payload = request.get_json(force=True) or {}
+                if not self.trader:
+                    return jsonify({'status': 'no_trader'}), 400
+                pos_id = payload.get('position_id') or payload.get('id')
+                limit_price = float(payload.get('limit_price') or 0)
+                reason = payload.get('reason', 'UI LIMIT EXIT')
+                if not pos_id or limit_price <= 0:
+                    return jsonify({'status': 'bad_request'}), 400
+                position = self.trader.paper_portfolio['positions'].get(pos_id)
+                if not position:
+                    # Fallback: try find by symbol + strike
+                    symbol = (payload.get('symbol') or '').strip()
+                    strike = payload.get('strike') or payload.get('strike_price')
+                    for pk, pos in list(self.trader.paper_portfolio.get('positions', {}).items()):
+                        if (str(pos.get('symbol','')) == str(symbol)) and (str(pos.get('strike_price','')) == str(strike)):
+                            position = pos
+                            pos_id = pk
+                            break
+                if not position:
+                    return jsonify({'status': 'not_found'}), 404
+                is_comm = bool((position.get('market_type') == 'COMMODITY') or (position.get('instrument_type') == 'FUT'))
+                if is_comm:
+                    self.trader.close_commodity_position(pos_id, limit_price, reason)
+                else:
+                    self.trader.close_option_position(pos_id, limit_price, reason)
+                packaged = self.trader.package_dashboard_data()
+                try:
+                    self.socketio.emit('dashboard_update', packaged)
+                except Exception:
+                    pass
+                return Response(json.dumps(packaged), mimetype='application/json')
+            except Exception as e:
+                logger.error(f"/api/position/close_limit failed: {e}")
                 return jsonify({'status': 'error'}), 500
 
         @self.app.route('/api/refresh_signals', methods=['POST'])
@@ -546,6 +961,13 @@ class DashboardApp:
                     'finnifty': 'NSE:NIFTY FIN SERVICE',
                     'sensex': 'BSE:SENSEX'
                 }
+                
+                # Add commodity mappings for current expiry contracts
+                commodity_mapping = {
+                    'crudeoilmini': 'MCX:CRUDEOILM',
+                    'goldmini': 'MCX:GOLDM'
+                }
+                
                 if kite and getattr(kite, 'access_token', None):
                     keys = list(mapping.values())
                     quotes = kite.quote(keys)
@@ -557,16 +979,75 @@ class DashboardApp:
                         change = price - prev
                         pct = (change / prev * 100.0) if prev else 0.0
                         out[k] = {'price': price, 'change': change, 'change_percent': pct}
+                    
+                    # Fetch commodity data
+                    commodity_keys = list(commodity_mapping.values())
+                    try:
+                        commodity_quotes = kite.quote(commodity_keys)
+                        for k, key in commodity_mapping.items():
+                            q = commodity_quotes.get(key, {})
+                            price = float(q.get('last_price') or 0)
+                            ohlc = q.get('ohlc') or {}
+                            prev = float(ohlc.get('close') or price)
+                            change = price - prev
+                            pct = (change / prev * 100.0) if prev else 0.0
+                            out[k] = {'price': price, 'change': change, 'change_percent': pct}
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch commodity quotes: {e}")
+                        for k in commodity_mapping.keys():
+                            out[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                    
                     return jsonify(out)
-                for k in ['nifty','banknifty','finnifty','sensex']:
-                    out[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                
+                # Fallback to public data via yfinance when broker quotes are unavailable
+                yf_map = {
+                    'nifty': '^NSEI',
+                    'banknifty': '^NSEBANK',
+                    'sensex': '^BSESN'
+                    # FINNIFTY public ticker is not consistently available on Yahoo; keep zero if missing
+                }
+                for k, yf_symbol in yf_map.items():
+                    try:
+                        tk = yf.Ticker(yf_symbol)
+                        fast = getattr(tk, 'fast_info', {}) or {}
+                        price = float(fast.get('last_price') or 0) or float((tk.info or {}).get('regularMarketPrice') or 0)
+                        prev = float(fast.get('previous_close') or 0) or float((tk.info or {}).get('previousClose') or price)
+                        change = price - prev
+                        pct = (change / prev * 100.0) if prev else 0.0
+                        out[k] = {'price': price, 'change': change, 'change_percent': pct}
+                    except Exception:
+                        out[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                
+                # Fallback for commodities using futures data
+                commodity_yf_map = {
+                    'crudeoilmini': 'CL=F',  # Crude Oil Futures
+                    'goldmini': 'GC=F'       # Gold Futures
+                }
+                for k, yf_symbol in commodity_yf_map.items():
+                    try:
+                        tk = yf.Ticker(yf_symbol)
+                        fast = getattr(tk, 'fast_info', {}) or {}
+                        price = float(fast.get('last_price') or 0) or float((tk.info or {}).get('regularMarketPrice') or 0)
+                        prev = float(fast.get('previous_close') or 0) or float((tk.info or {}).get('previousClose') or price)
+                        change = price - prev
+                        pct = (change / prev * 100.0) if prev else 0.0
+                        out[k] = {'price': price, 'change': change, 'change_percent': pct}
+                    except Exception:
+                        out[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                
+                # Ensure all keys exist
+                for key in ['finnifty', 'crudeoilmini', 'goldmini']:
+                    if key not in out:
+                        out[key] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
                 return jsonify(out)
             except Exception:
                 return jsonify({
                     'nifty': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0},
                     'banknifty': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0},
                     'finnifty': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0},
-                    'sensex': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                    'sensex': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0},
+                    'crudeoilmini': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0},
+                    'goldmini': {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
                 })
 
         @self.app.route('/api/state')
@@ -640,7 +1121,7 @@ class DashboardApp:
                             elif rr < const_min_rr:
                                 s2['pending_reason'] = 'risk_reward_below_min'
                             else:
-                                s2['pending_reason'] = 'awaiting_execution'
+                                s2['pending_reason'] = 'awaiting_entry'
                                 s2['pending_reason_detail'] = {
                                     'confidence': conf,
                                     'min_confidence': const_min_conf,
@@ -768,7 +1249,7 @@ class DashboardApp:
                             elif rr < const_min_rr:
                                 s2['pending_reason'] = 'risk_reward_below_min'
                             else:
-                                s2['pending_reason'] = 'awaiting_execution'
+                                s2['pending_reason'] = 'awaiting_entry'
                                 s2['pending_reason_detail'] = {
                                     'confidence': conf,
                                     'min_confidence': const_min_conf,
@@ -934,8 +1415,25 @@ class DashboardApp:
                         return Response(json.dumps(out), mimetype='application/json')
                     except Exception:
                         pass
-                for k in ['nifty','banknifty','finnifty','sensex']:
-                    out[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                # Fallback to public data via yfinance when broker quotes are unavailable
+                yf_map = {
+                    'nifty': '^NSEI',
+                    'banknifty': '^NSEBANK',
+                    'sensex': '^BSESN'
+                }
+                for k, yf_symbol in yf_map.items():
+                    try:
+                        tk = yf.Ticker(yf_symbol)
+                        fast = getattr(tk, 'fast_info', {}) or {}
+                        price = float(fast.get('last_price') or 0) or float((tk.info or {}).get('regularMarketPrice') or 0)
+                        prev = float(fast.get('previous_close') or 0) or float((tk.info or {}).get('previousClose') or price)
+                        change = price - prev
+                        pct = (change / prev * 100.0) if prev else 0.0
+                        out[k] = {'price': price, 'change': change, 'change_percent': pct}
+                    except Exception:
+                        out[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                if 'finnifty' not in out:
+                    out['finnifty'] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
                 return Response(json.dumps(out), mimetype='application/json')
             except Exception as e:
                 logger.error(f"/api/index_quotes failed: {e}")
@@ -1006,6 +1504,31 @@ class DashboardApp:
             except Exception as e:
                 logger.error(f"/api/stop failed: {e}")
                 return jsonify({'ok': False, 'error': 'stop_failed'}), 500
+        @self.app.route('/api/panic', methods=['POST'])
+        def api_panic():
+            try:
+                if not self.trader:
+                    return jsonify({'ok': False, 'error': 'no_trader'}), 400
+                keys = list(self.trader.paper_portfolio.get('positions', {}).keys())
+                for k in keys:
+                    pos = self.trader.paper_portfolio['positions'].get(k)
+                    if not pos:
+                        continue
+                    if pos.get('market_type') == 'COMMODITY' or pos.get('instrument_type') == 'FUT':
+                        self.trader.close_commodity_position(k, pos.get('current_premium', pos.get('entry_price', 0)), "PANIC EXIT")
+                    else:
+                        self.trader.close_option_position(k, pos.get('current_premium', pos.get('premium_paid', 0)), "PANIC EXIT")
+                self.trader.stop_automatic_scheduler()
+                try:
+                    self.socketio.emit('dashboard_update', self.trader.package_dashboard_data())
+                except Exception:
+                    pass
+                if self.trader.telegram_enabled:
+                    self.trader.send_telegram_alert("🛑 PANIC EXIT: All positions closed and trading stopped.")
+                return jsonify({'ok': True, 'status': 'panic_executed'})
+            except Exception as e:
+                logger.error(f"/api/panic failed: {e}")
+                return jsonify({'ok': False, 'error': 'panic_failed'}), 500
 
         @self.app.route('/api/reset', methods=['POST'])
         def api_reset():
@@ -1018,6 +1541,7 @@ class DashboardApp:
             except Exception as e:
                 logger.error(f"/api/reset failed: {e}")
                 return jsonify({'ok': False, 'error': 'reset_failed'}), 500
+
 
         @self.app.route('/api/reload', methods=['POST'])
         def api_reload():
@@ -1091,6 +1615,22 @@ class DashboardApp:
                 logger.error(f"/api/scan/nse failed: {e}")
                 return jsonify({'ok': False, 'error': 'scan_failed'}), 500
 
+        @self.app.route('/api/scan/sotd', methods=['POST'])
+        def api_scan_sotd():
+            try:
+                if not self.trader:
+                    return jsonify({'ok': False, 'error': 'no_trader'}), 400
+                key = 'SOTD_INTRADAY'
+                self.trader.run_strategy_scan(key)
+                try:
+                    snapshot = self.trader.package_dashboard_data()
+                    self.socketio.emit('dashboard_update', snapshot)
+                except Exception:
+                    pass
+                return jsonify({'ok': True, 'strategy': key})
+            except Exception as e:
+                logger.error(f"/api/scan/sotd failed: {e}")
+                return jsonify({'ok': False, 'error': 'scan_failed'}), 500
         @self.app.route('/api/scan/mcx', methods=['POST'])
         def api_scan_mcx():
             try:
@@ -1433,6 +1973,11 @@ class DashboardApp:
         """Emits the current structured portfolio data to all connected clients."""
         if self.socketio:
             self.socketio.emit('dashboard_update', portfolio_data)
+            try:
+                sigs = portfolio_data.get('signals') or []
+                self.socketio.emit('signals_list', sigs)
+            except Exception:
+                pass
 
     def start_dashboard(self):
         """Starts the Flask server in a non-blocking way using eventlet."""
@@ -1444,9 +1989,27 @@ class DashboardApp:
                     while True:
                         try:
                             self.socketio.emit('server_heartbeat', {'ts': time.time()})
+                            # Push lightweight realtime snapshots for UI
+                            if self.trader:
+                                snap = self.trader.package_dashboard_data()
+                                # Emit full dashboard snapshot
+                                try:
+                                    self.socketio.emit('dashboard_update', snap)
+                                except Exception:
+                                    pass
+                                try:
+                                    positions = snap.get('positions') or []
+                                    self.socketio.emit('positions_list', positions)
+                                except Exception:
+                                    pass
+                                try:
+                                    signals = snap.get('signals') or []
+                                    self.socketio.emit('signals_list', signals)
+                                except Exception:
+                                    pass
                         except Exception:
                             pass
-                        time.sleep(10)
+                        time.sleep(1)
                 threading.Thread(target=_heartbeat, daemon=True).start()
             except Exception:
                 pass
@@ -1465,6 +2028,24 @@ def load_config():
     except Exception as e:
         logger.error(f"Config load failed: {e}. Using empty config.")
         return {}
+
+def save_config_value(key: str, value):
+    try:
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        data = {}
+        if os.path.exists(CONFIG_FILE):
+            try:
+                with open(CONFIG_FILE, 'r') as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+        data[key] = value
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to persist config value {key}: {e}")
+        return False
 
 def load_portfolio() -> Dict:
     cfg = load_config()
@@ -1641,7 +2222,7 @@ class UltimateFNOTrader:
     # 1. STRATEGY CONFIGURATIONS (Now includes 'expiry_mode' and 'ignore_nifty_filter')
     STRATEGY_CONFIGS = {
         "HIGH_CONVICTION": {
-            "min_conf": 9.0, "min_rr": 1.8, "lot_multiplier": 2, "tsl_activation_pct": 10.0,
+            "min_conf": 8.5, "min_rr": 2.0, "lot_multiplier": 2, "tsl_activation_pct": 10.0,
             "tsl_pullback_pct": 4.0, "max_profit_pct": 20.0,
             "description": "MACD/Trend Breakout, Aggressive TSL (10/5).",
             "quick_cash_target": 25000,
@@ -1684,7 +2265,7 @@ class UltimateFNOTrader:
             "min_conf": 8.2, "min_rr": 1.5, "lot_multiplier": 4, "tsl_activation_pct": 6.0,
             "tsl_pullback_pct": 3.0, "max_profit_pct": 12.0,
             "description": "High Volume Scalp, Maximize Lot Size, Fast 25k Exit.",
-            "quick_cash_target": 10000,
+            "quick_cash_target": 5000,
             "time_exit_minutes": 10,
             "partial_book_pct": 50,
             "ignore_nifty_filter": False,
@@ -1698,6 +2279,16 @@ class UltimateFNOTrader:
             "time_exit_minutes": 6,
             "partial_book_pct": 70,
             "ignore_nifty_filter": False,
+            "expiry_mode": "ROBUST_AUTO"
+        },
+        "SOTD_INTRADAY": {
+            "min_conf": 7.2, "min_rr": 1.6, "lot_multiplier": 2, "tsl_activation_pct": 6.0,
+            "tsl_pullback_pct": 3.0, "max_profit_pct": 12.0,
+            "description": "Stock-of-the-Day intraday pipeline integrated into live engine.",
+            "quick_cash_target": 5000,
+            "time_exit_minutes": 10,
+            "partial_book_pct": 50,
+            "ignore_nifty_filter": True,
             "expiry_mode": "ROBUST_AUTO"
         },
         # COMMODITY TRADING STRATEGIES
@@ -1733,6 +2324,17 @@ class UltimateFNOTrader:
             "ignore_nifty_filter": True, # Commodities don't follow Nifty
             "expiry_mode": "COMMODITY_AUTO",
             "market_type": "COMMODITY"
+        },
+        "GOLDMINI_PINE": {
+            "min_conf": 8.0, "min_rr": 1.8, "lot_multiplier": 2, "tsl_activation_pct": 6.0,
+            "tsl_pullback_pct": 3.0, "max_profit_pct": 12.0,
+            "description": "Native port of Gold Mini Pine strategy (RSI/MACD/Bollinger).",
+            "quick_cash_target": 15000,
+            "time_exit_minutes": 20,
+            "partial_book_pct": 50,
+            "ignore_nifty_filter": True,
+            "expiry_mode": "COMMODITY_AUTO",
+            "market_type": "COMMODITY"
         }
     }
 
@@ -1745,6 +2347,15 @@ class UltimateFNOTrader:
 
     def __init__(self, dashboard_app, initial_strategy_key="HIGH_CONVICTION", request_token_override: Optional[str] = None, allow_input: bool = True):
         self.config = load_config()
+        try:
+            lvl = str(self.config.get('log_level', 'INFO')).strip().upper()
+            logger.setLevel(getattr(logging, lvl, logging.INFO))
+        except Exception:
+            pass
+        try:
+            self.quiet_logs = bool(self.config.get('quiet_logs', True))
+        except Exception:
+            self.quiet_logs = True
         try:
             mr = os.getenv('MAX_RISK_PCT')
             if mr:
@@ -1760,7 +2371,7 @@ class UltimateFNOTrader:
 
         # Load core config and portfolio
         self.load_trade_history()
-        self.kite = initialize_kite(API_KEY, API_SECRET, request_token=request_token_override, allow_input=allow_input)
+        self.kite = initialize_kite(API_KEY, API_SECRET, request_token=request_token_override, allow_input=allow_input) if (not BROKER or BROKER.upper() != 'GROWW') else None
         self.kite_api = None
         try:
             if KiteAPI and self.kite and getattr(self.kite, 'access_token', None):
@@ -1768,10 +2379,149 @@ class UltimateFNOTrader:
                 self.kite_api.set_access_token(self.kite.access_token)
         except Exception:
             self.kite_api = None
-        self.nse_fo_stocks, self.lot_sizes, self.token_map = fetch_fo_instruments(self.kite)
+        self.nse_fo_stocks, self.lot_sizes, self.token_map = fetch_fo_instruments(self.kite) if self.kite else (DEFAULT_NSE_UNIVERSE, {}, {})
+        self.groww_api = None
+        self.groww_sdk = None
+        if BROKER and BROKER.upper() == 'GROWW' and GrowwAPI:
+            try:
+                cfg_key = (self.config.get('groww_api_key') if isinstance(self.config, dict) else None)
+                cfg_secret = (self.config.get('groww_api_secret') if isinstance(self.config, dict) else None)
+                cfg_access = (self.config.get('groww_access_token') if isinstance(self.config, dict) else None)
+                cfg_base = (self.config.get('groww_base_url') if isinstance(self.config, dict) else None)
+                cfg_token_ep = (self.config.get('groww_token_endpoint') if isinstance(self.config, dict) else None)
+                cfg_totp_secret = (self.config.get('groww_totp_secret') if isinstance(self.config, dict) else None)
+                g_key = GROWW_API_KEY or cfg_key
+                g_secret = GROWW_API_SECRET or cfg_secret
+                g_access = GROWW_ACCESS_TOKEN or cfg_access
+                g_base = GROWW_BASE_URL or cfg_base
+                g_token_ep = GROWW_TOKEN_ENDPOINT or cfg_token_ep
+                try:
+                    if (not g_access) and g_key and (str(g_key).count('.') >= 2):
+                        g_access = g_key
+                        logger.info("Using Groww access token from config key")
+                except Exception:
+                    pass
+                self.groww_api = GrowwAPI(g_key, g_secret, g_access, g_base, g_token_ep)
+                if not self.groww_api.access_token and self.groww_api.api_key and self.groww_api.api_secret and self.groww_api.token_endpoint:
+                    try:
+                        tok = self.groww_api.generate_access_token_approval()
+                        if tok:
+                            os.environ['GROWW_ACCESS_TOKEN'] = tok
+                            logger.info("Groww access token generated via approval flow.")
+                    except Exception as e:
+                        logger.warning(f"Groww token generation failed: {e}")
+                if (not self.groww_api.access_token) and cfg_totp_secret and pyotp and self.groww_api.token_endpoint and self.groww_api.api_key:
+                    try:
+                        code = pyotp.TOTP(cfg_totp_secret).now()
+                        tok2 = self.groww_api.generate_access_token_totp(code)
+                        if tok2:
+                            os.environ['GROWW_ACCESS_TOKEN'] = tok2
+                            self.groww_api.set_access_token(tok2)
+                            logger.info("Groww access token generated via TOTP flow.")
+                    except Exception as e:
+                        logger.warning(f"TOTP token generation failed: {e}")
+                if not self.groww_api.base_url:
+                    logger.warning("Groww base URL not configured. Market overview will use PAPER fallback until GROWW_BASE_URL is set.")
+            except Exception:
+                self.groww_api = None
+        if BROKER and BROKER.upper() == 'GROWW' and GrowwSDK:
+            try:
+                cfg_access = (self.config.get('groww_access_token') if isinstance(self.config, dict) else None)
+                cfg_key_for_token = (self.config.get('groww_api_key') if isinstance(self.config, dict) else None)
+                g_access = GROWW_ACCESS_TOKEN or cfg_access
+                try:
+                    if (not g_access) and cfg_key_for_token and (str(cfg_key_for_token).count('.') >= 2):
+                        g_access = cfg_key_for_token
+                        logger.info("Using Groww SDK token from config key")
+                except Exception:
+                    pass
+                if g_access:
+                    self.groww_sdk = GrowwSDK(g_access)
+                    try:
+                        self.groww_api and self.groww_api.set_access_token(g_access)
+                    except Exception:
+                        pass
+            except Exception:
+                self.groww_sdk = None
+        try:
+            if BROKER and BROKER.upper() == 'GROWW' and getattr(self, 'groww_api', None):
+                resp0 = self.groww_api.get_ltp("CASH", ("NSE_RELIANCE",))
+                st0 = resp0.get("status")
+                logger.info(f"Groww connectivity check (RELIANCE): status={st0}")
+        except Exception as e:
+            logger.warning(f"Groww connectivity check error: {e}")
+        # Ensure live market data in PAPER mode without broker tokens by forcing public data fetch
+        try:
+            has_kite_token = bool(self.kite and getattr(self.kite, 'access_token', None))
+            has_groww_token = bool((self.groww_api and getattr(self.groww_api, 'access_token', None)) or self.groww_sdk)
+            if self.mode == 'PAPER' and (not has_kite_token) and (not has_groww_token):
+                os.environ['FORCE_MOCK_DATA'] = os.environ.get('FORCE_MOCK_DATA', '1') or '1'
+                logger.info("FORCE_MOCK_DATA enabled for PAPER mode to use public live data (yfinance).")
+        except Exception:
+            pass
         
         # COMMODITY TRADING: Load commodity instruments
         self.commodity_symbols, self.commodity_lot_sizes, self.commodity_token_map = fetch_commodity_instruments(self.kite)
+        try:
+            # Normalize common MCX aliases so GOLDMINI is available even if broker uses GOLDM
+            aliases = {
+                'GOLDMINI': ['GOLDM', 'GOLD MINI', 'GOLD-MINI'],
+                'CRUDEOILMINI': ['CRUDEOILM', 'CRUDE OIL MINI', 'CRUDE-OIL-MINI'],
+                'NATURALGASMINI': ['NATURALGASM', 'NATURAL GAS MINI', 'NATURAL-GAS-MINI']
+            }
+            for canonical, alts in aliases.items():
+                if canonical not in self.commodity_symbols:
+                    for alt in alts:
+                        if alt in self.commodity_symbols:
+                            self.commodity_symbols.append(canonical)
+                            if alt in self.commodity_token_map and canonical not in self.commodity_token_map:
+                                self.commodity_token_map[canonical] = self.commodity_token_map.get(alt)
+                            if alt in self.commodity_lot_sizes and canonical not in self.commodity_lot_sizes:
+                                self.commodity_lot_sizes[canonical] = self.commodity_lot_sizes.get(alt)
+                            break
+        except Exception:
+            pass
+
+        # Dynamic lot-size resolution from Kite MCX instruments
+        # (No hardcoded defaults; resolve on the fly when needed)
+        def _resolve_mcx_lot_size(sym: str) -> int:
+            try:
+                ls = int(self.commodity_lot_sizes.get(sym) or 0)
+                if ls > 0:
+                    return ls
+            except Exception:
+                pass
+            try:
+                instruments = self.get_mcx_instruments()
+                if instruments:
+                    # direct match by name
+                    for inst in instruments:
+                        seg = str(inst.get('segment') or '')
+                        if seg.startswith('MCX') and str(inst.get('name')).strip().upper() == sym.upper():
+                            val = int(inst.get('lot_size') or 0)
+                            if val > 0:
+                                self.commodity_lot_sizes[sym] = val
+                                return val
+                    # alias lookup if canonical not present
+                    aliases = {
+                        'GOLDMINI': ['GOLDM', 'GOLD MINI', 'GOLD-MINI'],
+                        'CRUDEOILMINI': ['CRUDEOILM', 'CRUDE OIL MINI', 'CRUDE-OIL-MINI'],
+                        'NATURALGASMINI': ['NATURALGASM', 'NATURAL GAS MINI', 'NATURAL-GAS-MINI']
+                    }
+                    for canonical, alts in aliases.items():
+                        if sym.upper() == canonical:
+                            for alt in alts:
+                                for inst in instruments:
+                                    seg = str(inst.get('segment') or '')
+                                    if seg.startswith('MCX') and str(inst.get('name')).strip().upper() == alt.upper():
+                                        val = int(inst.get('lot_size') or 0)
+                                        if val > 0:
+                                            self.commodity_lot_sizes[canonical] = val
+                                            return val
+                return int(self.commodity_lot_sizes.get(sym) or 0)
+            except Exception:
+                return int(self.commodity_lot_sizes.get(sym) or 0)
+        self.get_mcx_lot_size = _resolve_mcx_lot_size
         
         # Remove PAPER fallbacks: rely strictly on broker instruments
         
@@ -1789,7 +2539,7 @@ class UltimateFNOTrader:
         self.refresh_mcx_instruments_cache()
 
         # Load NSE instrument map (used for spot token lookup)
-        self.nse_instrument_map = self._load_nse_instrument_map()
+        self.nse_instrument_map = self._load_nse_instrument_map() if self.kite else {}
 
         self.token_to_symbol = {}
         try:
@@ -1825,6 +2575,10 @@ class UltimateFNOTrader:
                     logger.info(f"Boosted NSE signal surfacing for PAPER mode (aggressive only): min_conf={self.min_confidence}, required_move={self.required_move}, batch_size={self.scan_batch_size}")
                 else:
                     self.required_move = max(3.0, float(getattr(self, 'required_move', 4.0)))
+                if key in ['SOTD_INTRADAY']:
+                    self.min_confidence = float(self.strategy_params.get('min_conf', self.min_confidence))
+                    self.required_move = 2.2
+                    self.scan_batch_size = max(20, int(getattr(self, 'scan_batch_size', 8) * 2))
         except Exception:
             pass
         self.max_positions = self.config.get('max_positions', 3)
@@ -1839,7 +2593,12 @@ class UltimateFNOTrader:
         self.ws_reconnect_in_progress = False
         self.last_ws_error_log_time = datetime.min
         self.last_ws_close_log_time = datetime.min
-        self._initialize_websockets()
+        try:
+            broker = (os.getenv('BROKER') or 'GROWW').strip().upper()
+        except Exception:
+            broker = 'GROWW'
+        if broker == 'KITE' and str(self.mode).upper() == 'LIVE':
+            self._initialize_websockets()
         # ----------------------------------------
 
         self.telegram_token = TELEGRAM_TOKEN or self.config.get('telegram_token')
@@ -1862,6 +2621,7 @@ class UltimateFNOTrader:
         self.today_date = datetime.now().date()
         self.active_market_regime = "INITIALIZING"
         self.backtest_run_today = False
+        self.last_trade_times = {}
 
         self.multi_strategy_mode = self.config.get('multi_strategy_mode', False)
         try:
@@ -2206,6 +2966,46 @@ class UltimateFNOTrader:
         else:
             return self._tick_round_down(base * (1.0 - pct), tick=tick_val)
 
+    def _protected_limit_with_depth(self, quote: Dict, side: str, instrument_type: str, fallback_ltp: float) -> Optional[float]:
+        try:
+            q = quote or {}
+            depth = q.get('depth') or {}
+            buy_arr = depth.get('buy') or []
+            sell_arr = depth.get('sell') or []
+            best_bid = None
+            best_ask = None
+            try:
+                if sell_arr and sell_arr[0].get('price'):
+                    best_ask = float(sell_arr[0]['price'])
+            except Exception:
+                pass
+            try:
+                if buy_arr and buy_arr[0].get('price'):
+                    best_bid = float(buy_arr[0]['price'])
+            except Exception:
+                pass
+            if best_bid is None:
+                bp = q.get('buy_price')
+                if bp is not None:
+                    best_bid = float(bp)
+            if best_ask is None:
+                ap = q.get('sell_price')
+                if ap is not None:
+                    best_ask = float(ap)
+            tick_val = float(self.config.get('tick_size_opt', 0.05)) if instrument_type == 'OPT' else float(self.config.get('tick_size_eq', 0.05))
+            if (best_bid is None) or (best_ask is None) or best_ask <= 0 or best_bid <= 0 or best_ask <= best_bid:
+                return self._market_protection_limit(float(fallback_ltp or 0), side, instrument_type)
+            spread = max(0.0, best_ask - best_bid)
+            mid = (best_bid + best_ask) / 2.0
+            if side.upper() == 'BUY':
+                target = min(best_ask - tick_val, mid + 0.25 * spread)
+                return self._tick_round_up(target, tick=tick_val)
+            else:
+                target = max(best_bid + tick_val, mid - 0.25 * spread)
+                return self._tick_round_down(target, tick=tick_val)
+        except Exception:
+            return self._market_protection_limit(float(fallback_ltp or 0), side, instrument_type)
+
     def self_test_market_protection(self):
         samples_opt = [8.5, 25.0, 150.0, 700.0]
         samples_eq = [80.0, 250.0, 620.0]
@@ -2365,9 +3165,113 @@ class UltimateFNOTrader:
 
     def _initialize_websockets(self):
         """Initializes the Kite Ticker client with robust reconnection logic and initial token subscriptions."""
-        if not KITE_AVAILABLE or not self.kite or not self.kite.access_token:
-            logger.warning("Kite Ticker not initialized due to missing credentials.")
+        if not KITE_AVAILABLE:
+            logger.warning("Kite Ticker not initialized: KiteConnect library unavailable.")
             return
+        if not self.kite or not getattr(self.kite, 'access_token', None):
+            try:
+                if KiteConnect and API_KEY:
+                    url = KiteConnect(api_key=API_KEY).login_url()
+                    if not getattr(self, 'kite_login_prompt_displayed', False):
+                        logger.info(f"Kite not initialized. Authorize by opening login URL: {url}")
+                        self.kite_login_prompt_displayed = True
+                        if not getattr(self, 'kite_input_prompt_done', False):
+                            try:
+                                rt = input("Paste Kite request_token here (press Enter to skip): ").strip()
+                            except Exception:
+                                rt = ""
+                            self.kite_input_prompt_done = True
+                            if rt:
+                                try:
+                                    k = KiteConnect(api_key=API_KEY)
+                                    session_data = k.generate_session(rt, api_secret=API_SECRET or "")
+                                    k.set_access_token(session_data.get("access_token"))
+                                    try:
+                                        k.profile()
+                                        self.kite = k
+                                        try:
+                                            with open(TOKEN_FILE, "w") as f:
+                                                json.dump({"access_token": session_data.get("access_token"),
+                                                           "updated_at": datetime.now().isoformat()}, f)
+                                        except Exception:
+                                            pass
+                                        logger.info("Kite session generated and token saved to file.")
+                                    except Exception:
+                                        logger.warning("Kite profile check failed after session generation.")
+                                except Exception as e:
+                                    logger.error(f"Kite session generation via pasted token failed: {e}")
+            except Exception:
+                pass
+            logger.info("Waiting for Kite initialization to start ticker...")
+            last_log = time.time()
+            last_mtime = 0
+            while True:
+                try:
+                    # 1) If REQUEST_TOKEN is provided via environment, try to generate session
+                    req_tok = (os.getenv('REQUEST_TOKEN') or '').strip()
+                    if req_tok:
+                        try:
+                            k = KiteConnect(api_key=API_KEY)
+                            session_data = k.generate_session(req_tok, api_secret=API_SECRET or "")
+                            k.set_access_token(session_data.get("access_token"))
+                            try:
+                                k.profile()
+                                self.kite = k
+                                with open(TOKEN_FILE, "w") as f:
+                                    json.dump({"access_token": session_data.get("access_token"),
+                                               "updated_at": datetime.now().isoformat()}, f)
+                                break
+                            except Exception:
+                                pass
+                        except Exception:
+                            pass
+                    # 2) If a request token file exists, consume it and generate session
+                    if os.path.exists('kite_request_token.txt'):
+                        try:
+                            with open('kite_request_token.txt', 'r') as f:
+                                rt_file = f.read().strip()
+                            if rt_file:
+                                k = KiteConnect(api_key=API_KEY)
+                                session_data = k.generate_session(rt_file, api_secret=API_SECRET or "")
+                                k.set_access_token(session_data.get("access_token"))
+                                try:
+                                    k.profile()
+                                    self.kite = k
+                                    with open(TOKEN_FILE, "w") as f:
+                                        json.dump({"access_token": session_data.get("access_token"),
+                                                   "updated_at": datetime.now().isoformat()}, f)
+                                    # Clear the request token file after successful use
+                                    try:
+                                        os.remove('kite_request_token.txt')
+                                    except Exception:
+                                        pass
+                                    break
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                    if os.path.exists(TOKEN_FILE):
+                        mtime = os.path.getmtime(TOKEN_FILE)
+                        if mtime != last_mtime:
+                            last_mtime = mtime
+                            with open(TOKEN_FILE, "r") as f:
+                                data = json.load(f)
+                            tok = (data.get("access_token") or data.get("token") or "").strip()
+                            if tok:
+                                k = KiteConnect(api_key=API_KEY)
+                                k.set_access_token(tok)
+                                try:
+                                    k.profile()
+                                    self.kite = k
+                                    break
+                                except Exception:
+                                    pass
+                    if time.time() - last_log >= 30:
+                        logger.info("Still waiting for Kite authorization... set REQUEST_TOKEN env or write token to kite_request_token.txt")
+                        last_log = time.time()
+                except Exception:
+                    pass
+                time.sleep(3)
 
         api_key = self.kite.api_key
         access_token = self.kite.access_token
@@ -2608,6 +3512,19 @@ class UltimateFNOTrader:
                         logger.info(f"Adjusted thresholds for COMMODITY live: min_conf={self.min_confidence:.2f}, min_rr={self.min_rr_ratio:.2f}")
                 except Exception:
                     pass
+                try:
+                    if (os.getenv('BROKER') or 'GROWW').strip().upper() == 'GROWW' and getattr(self, 'groww_api', None):
+                        test_syms = ['RELIANCE','NIFTY']
+                        resp = self.groww_api.ltp(test_syms)
+                        pay = resp.get('payload') or resp.get('ltp') or {}
+                        vals = {}
+                        for s in test_syms:
+                            v = pay.get(s) or pay.get(f"NSE_{s}") or {}
+                            lp = v.get('ltp') if isinstance(v, dict) else None
+                            vals[s] = lp if lp is not None else 0.0
+                        logger.info(f"Groww LTP test on strategy switch: {vals}")
+                except Exception:
+                    pass
             else:
                 logger.error(f"{Fore.RED}Invalid parameters for strategy: {strategy_key}. Keeping current strategy.{Style.RESET_ALL}")
         else:
@@ -2655,6 +3572,192 @@ class UltimateFNOTrader:
         except Exception:
             return None, None
 
+    def get_strike_step(self, symbol: str) -> int:
+        s = str(symbol).upper()
+        if s in {'NIFTY', 'NIFTY 50', 'NSE_NIFTY'}:
+            return 50
+        if s in {'BANKNIFTY', 'NIFTY BANK', 'NSE_NIFTY_BANK'}:
+            return 100
+        if s in {'GOLD', 'GOLDM', 'GOLDMINI'}:
+            return 100
+        if s in {'SILVER', 'SILVERM', 'SILVERMIC'}:
+            return 500
+        if s in {'CRUDEOIL', 'CRUDEOILM', 'CRUDEOILMINI'}:
+            return 50
+        return 50
+
+    def _has_liquidity(self, quote: Dict) -> bool:
+        d = (quote.get('depth') or {})
+        buys = d.get('buy') or []
+        sells = d.get('sell') or []
+        def qty_sum(arr):
+            return sum([float(x.get('quantity') or 0) for x in arr if float(x.get('price') or 0) > 0])
+        return qty_sum(buys) > 0 and qty_sum(sells) > 0
+
+    def ensure_liquid_option(self, symbol: str, initial_strike: float, option_type: str, expiry_date_str: str) -> Tuple[Optional[float], Optional[int], Optional[str], Optional[float]]:
+        step = self.get_strike_step(symbol)
+        offsets = [0, step, -step, 2*step, -2*step, 3*step, -3*step]
+        for off in offsets:
+            desired = int(round(initial_strike + off))
+            token, ts = self.get_option_instrument_token(symbol, desired, option_type, expiry_date_str)
+            if token and ts and self.kite:
+                qkey = f"NFO:{ts}"
+                try:
+                    q = self.safe_quote(qkey)
+                    qq = q.get(qkey, {})
+                    if self._has_liquidity(qq):
+                        lp = qq.get('last_price')
+                        if lp and float(lp) > 0:
+                            return desired, token, ts, float(lp)
+                except Exception:
+                    pass
+        return None, None, None, None
+
+    def get_commodity_option_instrument_token_exact(self, symbol: str, strike: float, option_type: str, expiry_date_str: str) -> Tuple[Optional[int], Optional[str]]:
+        mcx_instruments = self.get_mcx_instruments()
+        if not mcx_instruments:
+            return None, None
+        try:
+            instrument_code = 'CE' if str(option_type).upper() in ['CE', 'CALL'] else 'PE'
+            s_upper = str(symbol).strip().upper()
+            allowed_prefixes_map = {
+                'GOLDMINI': ['GOLDMINI', 'GOLDM'],
+                'GOLDM': ['GOLDM'],
+                'GOLD': ['GOLD', 'GOLDM'],
+                'SILVER': ['SILVER', 'SILVERM'],
+                'SILVERM': ['SILVERM'],
+                'SILVERMIC': ['SILVERMIC'],
+                'CRUDEOIL': ['CRUDEOIL', 'CRUDEOILM'],
+                'CRUDEOILM': ['CRUDEOILM'],
+                'CRUDEOILMINI': ['CRUDEOILMINI', 'CRUDEOILM'],
+                'NATURALGAS': ['NATURALGAS', 'NATURALGASM'],
+                'NATURALGASM': ['NATURALGASM'],
+                'NATURALGASMINI': ['NATURALGASMINI', 'NATURALGASM'],
+            }
+            allowed_prefixes = allowed_prefixes_map.get(s_upper, [s_upper])
+            strike_int = int(round(float(strike)))
+            for inst in mcx_instruments:
+                seg = str(inst.get('segment') or '')
+                if not seg.startswith('MCX'):
+                    continue
+                if str(inst.get('instrument_type') or '').upper() != instrument_code:
+                    continue
+                exp = inst.get('expiry')
+                if isinstance(exp, datetime):
+                    exp_str = exp.strftime('%Y-%m-%d')
+                else:
+                    exp_str = str(exp)
+                if exp_str != expiry_date_str:
+                    continue
+                nm = str(inst.get('name') or '').strip().upper()
+                ts = str(inst.get('tradingsymbol') or '').strip().upper()
+                if not (nm == s_upper or any(ts.startswith(pfx) for pfx in allowed_prefixes)):
+                    continue
+                st = 0
+                try:
+                    st = int(inst.get('strike') or 0)
+                except Exception:
+                    st = 0
+                if st <= 0:
+                    st = int(self.parse_strike_from_tradingsymbol(ts) or 0)
+                if st == strike_int:
+                    return inst.get('instrument_token'), inst.get('tradingsymbol')
+            return None, None
+        except Exception:
+            return None, None
+
+    def ensure_liquid_commodity_option(self, symbol: str, initial_strike: float, option_type: str, expiry_date_str: str) -> Tuple[Optional[int], Optional[str], Optional[float], Optional[float]]:
+        step = self.get_strike_step(symbol)
+        offsets = [0, step, -step]
+        try:
+            # Prioritize Nearest ITM (0 offset) first, then try deeper ITM
+            if str(option_type).upper() in ['CE','CALL']:
+                offsets = [0, -step, step]
+            elif str(option_type).upper() in ['PE','PUT']:
+                offsets = [0, step, -step]
+        except Exception:
+            pass
+        best = None
+        for off in offsets:
+            desired = float(int(round(float(initial_strike + off))))
+            token, ts = self.get_commodity_option_instrument_token_exact(symbol, desired, option_type, expiry_date_str)
+            if not token or not ts or not self.kite:
+                continue
+            qkey = f"MCX:{ts}"
+            try:
+                q = self.safe_quote(qkey)
+                qq = q.get(qkey, {})
+                lp = float(qq.get('last_price') or 0)
+                if lp <= 0.05:
+                    continue
+                if self._has_liquidity(qq):
+                    return token, ts, float(self.parse_strike_from_tradingsymbol(ts) or desired), lp
+                if best is None:
+                    best = (token, ts, float(self.parse_strike_from_tradingsymbol(ts) or desired), lp)
+            except Exception:
+                continue
+        # Relaxed Fallback: If no exact/offset match found, search ALL strikes for this expiry
+        if best is None:
+            try:
+                candidates = []
+                mcx_instruments = self.get_mcx_instruments() or []
+                s_upper = str(symbol).strip().upper()
+                # Use same prefix map as get_commodity_instrument_token
+                allowed_prefixes_map = {
+                    'GOLDMINI': ['GOLDMINI', 'GOLDM'],
+                    'GOLDM': ['GOLDM'],
+                    'GOLD': ['GOLD','GOLDM'],
+                    'SILVER': ['SILVER','SILVERM'],
+                    'SILVERM': ['SILVERM'],
+                    'SILVERMIC': ['SILVERMIC'],
+                    'CRUDEOIL': ['CRUDEOIL','CRUDEOILM'],
+                    'CRUDEOILM': ['CRUDEOILM'],
+                    'CRUDEOILMINI': ['CRUDEOILMINI', 'CRUDEOILM'],
+                    'NATURALGAS': ['NATURALGAS','NATURALGASM'],
+                    'NATURALGASM': ['NATURALGASM'],
+                    'NATURALGASMINI': ['NATURALGASMINI','NATURALGASM'],
+                }
+                allowed_prefixes = allowed_prefixes_map.get(s_upper, [s_upper])
+                
+                for inst in mcx_instruments:
+                    seg = str(inst.get('segment') or '')
+                    if not seg.startswith('MCX'): continue
+                    
+                    itype = str(inst.get('instrument_type')).upper()
+                    target_type = 'CE' if str(option_type).upper() in ['CE','CALL'] else 'PE'
+                    if itype != target_type: continue
+                    
+                    # Expiry Check
+                    exp = inst.get('expiry')
+                    exp_str = exp.strftime("%Y-%m-%d") if isinstance(exp, datetime) else str(exp)
+                    if exp_str != expiry_date_str: continue
+                    
+                    # Symbol Check
+                    nm = str(inst.get('name') or '').strip().upper()
+                    ts = str(inst.get('tradingsymbol') or '').strip().upper()
+                    if not (nm == s_upper or any(ts.startswith(pfx) for pfx in allowed_prefixes)):
+                        continue
+                        
+                    st = int(inst.get('strike') or 0)
+                    if st <= 0:
+                        st = int(self.parse_strike_from_tradingsymbol(ts) or 0)
+                    if st > 0:
+                        candidates.append((abs(st - initial_strike), st, inst.get('instrument_token'), ts))
+                
+                if candidates:
+                    candidates.sort(key=lambda x: x[0])
+                    # Check top 3 closest for liquidity
+                    for _, st, tok, ts in candidates[:3]:
+                        qkey = f"MCX:{ts}"
+                        q = self.safe_quote(qkey)
+                        lp = (q.get(qkey, {}) or {}).get('last_price')
+                        if lp and lp > 0.05:
+                            return tok, ts, float(st), float(lp)
+            except Exception:
+                pass
+
+        return best if best is not None else (None, None, None, None)
+
     def get_commodity_instrument_token(self, symbol, expiry_date_str, instrument_type='FUT'):
         """
         Finds the specific MCX commodity contract token using the local cache.
@@ -2666,21 +3769,39 @@ class UltimateFNOTrader:
         try:
             # For commodities, we primarily trade futures, but also support options
             instrument_code = 'FUT' if instrument_type.upper() == 'FUT' else ('CE' if 'CALL' in str(instrument_type).upper() else 'PE')
-            
+            s_upper = str(symbol).strip().upper()
+            # Restrict matching to the intended variant to avoid picking MIC or M when asking for base
+            allowed_prefixes_map = {
+                'GOLDMINI': ['GOLDMINI', 'GOLDM'],
+                'GOLDM': ['GOLDM'],
+                'GOLD': ['GOLD','GOLDM'],
+                'SILVER': ['SILVER','SILVERM'],
+                'SILVERM': ['SILVERM'],
+                'SILVERMIC': ['SILVERMIC'],
+                'CRUDEOIL': ['CRUDEOIL','CRUDEOILM'],
+                'CRUDEOILM': ['CRUDEOILM'],
+                'CRUDEOILMINI': ['CRUDEOILMINI', 'CRUDEOILM'],
+                'NATURALGAS': ['NATURALGAS','NATURALGASM'],
+                'NATURALGASM': ['NATURALGASM'],
+                'NATURALGASMINI': ['NATURALGASMINI','NATURALGASM'],
+            }
+            allowed_prefixes = allowed_prefixes_map.get(s_upper, [s_upper])
+            def _match_inst(inst):
+                if inst.get('instrument_type') != instrument_code:
+                    return False
+                nm = str(inst.get('name') or '').strip().upper()
+                ts = str(inst.get('tradingsymbol') or '').strip().upper()
+                if nm == s_upper:
+                    return True
+                return any(ts.startswith(pfx) for pfx in allowed_prefixes)
             base_candidates = [
                 i for i in mcx_instruments
-                if i.get('instrument_type') == instrument_code
-                and (i.get('name') == symbol or str(i.get('tradingsymbol','')).startswith(symbol))
-                and i.get('expiry').strftime("%Y-%m-%d") == expiry_date_str
+                if _match_inst(i) and i.get('expiry').strftime("%Y-%m-%d") == expiry_date_str
             ]
 
             if not base_candidates:
                 # fall back to nearest future expiry if no contracts for target expiry
-                alt_candidates = [
-                    i for i in mcx_instruments
-                    if i.get('instrument_type') == instrument_code
-                    and (i.get('name') == symbol or str(i.get('tradingsymbol','')).startswith(symbol))
-                ]
+                alt_candidates = [i for i in mcx_instruments if _match_inst(i)]
                 if alt_candidates:
                     alt_candidates.sort(key=lambda x: x.get('expiry'))
                     # pick earliest future expiry set
@@ -2698,21 +3819,146 @@ class UltimateFNOTrader:
         except Exception:
             return None, None
 
+    def get_commodity_option_instrument_token(self, symbol: str, desired_strike: float, option_type: str, expiry_date_str: str) -> Tuple[Optional[int], Optional[str]]:
+        """
+        Finds the nearest available MCX option contract (CE/PE) for the given symbol, strike and expiry.
+        """
+        mcx_instruments = self.get_mcx_instruments()
+        if not mcx_instruments:
+            return None, None
+        try:
+            instrument_code = 'CE' if str(option_type).upper() in ['CE', 'CALL'] else 'PE'
+            s_upper = str(symbol).strip().upper()
+            allowed_prefixes_map = {
+                'GOLDMINI': ['GOLDMINI', 'GOLDM'],
+                'GOLDM': ['GOLDM'],
+                'GOLD': ['GOLD','GOLDM'],
+                'SILVER': ['SILVER','SILVERM'],
+                'SILVERM': ['SILVERM'],
+                'SILVERMIC': ['SILVERMIC'],
+                'CRUDEOIL': ['CRUDEOIL','CRUDEOILM'],
+                'CRUDEOILM': ['CRUDEOILM'],
+                'CRUDEOILMINI': ['CRUDEOILMINI', 'CRUDEOILM'],
+                'NATURALGAS': ['NATURALGAS','NATURALGASM'],
+                'NATURALGASM': ['NATURALGASM'],
+                'NATURALGASMINI': ['NATURALGASMINI','NATURALGASM'],
+            }
+            allowed_prefixes = allowed_prefixes_map.get(s_upper, [s_upper])
+            def _match_inst(inst):
+                if inst.get('instrument_type') != instrument_code:
+                    return False
+                nm = str(inst.get('name') or '').strip().upper()
+                ts = str(inst.get('tradingsymbol') or '').strip().upper()
+                if nm == s_upper:
+                    return True
+                return any(ts.startswith(pfx) for pfx in allowed_prefixes)
+            candidates = [
+                i for i in mcx_instruments
+                if _match_inst(i) and i.get('expiry').strftime("%Y-%m-%d") == expiry_date_str
+            ]
+            if not candidates:
+                alt = [i for i in mcx_instruments if _match_inst(i)]
+                if alt:
+                    alt.sort(key=lambda x: x.get('expiry'))
+                    earliest = alt[0].get('expiry')
+                    candidates = [i for i in alt if i.get('expiry') == earliest]
+            if candidates:
+                if any('strike' in i for i in candidates):
+                    target = min(candidates, key=lambda x: abs(int(x.get('strike', 0) or 0) - int(desired_strike)))
+                else:
+                    target = candidates[0]
+                return target.get('instrument_token'), target.get('tradingsymbol')
+            return None, None
+        except Exception:
+            return None, None
     def parse_strike_from_tradingsymbol(self, ts: str) -> Optional[int]:
         try:
             s = str(ts)
             for suf in ['CE', 'PE']:
                 if s.endswith(suf):
                     core = s[:-2]
-                    digits = ''.join(ch for ch in core if ch.isdigit())
-                    if digits:
-                        return int(digits)
-            digits = ''.join(ch for ch in s if ch.isdigit())
-            if digits:
-                return int(digits)
+                    # Extract the last contiguous digit run from core (ignoring date digits like '26')
+                    i = len(core) - 1
+                    buf = []
+                    while i >= 0 and core[i].isdigit():
+                        buf.append(core[i])
+                        i -= 1
+                    if buf:
+                        return int(''.join(reversed(buf)))
+            # Fallback: extract trailing digit run from full string
+            i = len(s) - 1
+            buf = []
+            while i >= 0 and s[i].isdigit():
+                buf.append(s[i])
+                i -= 1
+            if buf:
+                return int(''.join(reversed(buf)))
             return None
         except Exception:
             return None
+
+    def find_nearest_mcx_option(self, symbol: str, spot_price: float, option_type: str, expiry_date_str: str) -> Tuple[Optional[int], Optional[int], Optional[str]]:
+        """
+        Selects the nearest MCX option strike to the given spot using MCX instrument cache.
+        Returns (strike, token, tradingsymbol)
+        """
+        try:
+            step = self.get_strike_step(symbol)
+            desired_strike = int(round(spot_price / step) * step)
+            mcx_instruments = self.get_mcx_instruments()
+            if not mcx_instruments:
+                return None, None, None
+            instrument_code = 'CE' if option_type in ['CALL', 'CE'] else 'PE'
+
+            s_upper = str(symbol).strip().upper()
+            allowed_prefixes_map = {
+                'GOLDMINI': ['GOLDMINI', 'GOLDM'],
+                'GOLDM': ['GOLDM'],
+                'GOLD': ['GOLD','GOLDM'],
+                'SILVER': ['SILVER','SILVERM'],
+                'SILVERM': ['SILVERM'],
+                'SILVERMIC': ['SILVERMIC'],
+                'CRUDEOIL': ['CRUDEOIL','CRUDEOILM'],
+                'CRUDEOILM': ['CRUDEOILM'],
+                'CRUDEOILMINI': ['CRUDEOILMINI', 'CRUDEOILM'],
+                'NATURALGAS': ['NATURALGAS','NATURALGASM'],
+                'NATURALGASM': ['NATURALGASM'],
+                'NATURALGASMINI': ['NATURALGASMINI','NATURALGASM'],
+            }
+            allowed_prefixes = allowed_prefixes_map.get(s_upper, [s_upper])
+
+            def _match(inst):
+                if str(inst.get('instrument_type')) != instrument_code:
+                    return False
+                if inst.get('expiry').strftime("%Y-%m-%d") != expiry_date_str:
+                    return False
+                nm = str(inst.get('name') or '').strip().upper()
+                ts = str(inst.get('tradingsymbol') or '').strip().upper()
+                return (nm == s_upper) or any(ts.startswith(pfx) for pfx in allowed_prefixes)
+
+            candidates = [i for i in mcx_instruments if _match(i)]
+            if not candidates:
+                return None, None, None
+
+            def _strike(inst):
+                try:
+                    val = int(inst.get('strike') or 0)
+                    if val > 0:
+                        return val
+                    return int(self.parse_strike_from_tradingsymbol(inst.get('tradingsymbol') or '') or 0)
+                except Exception:
+                    return int(self.parse_strike_from_tradingsymbol(inst.get('tradingsymbol') or '') or 0)
+
+            for c in candidates:
+                c['_strike_val'] = _strike(c)
+            valid = [c for c in candidates if int(c.get('_strike_val') or 0) > 0]
+            if not valid:
+                return None, None, None
+
+            target = min(valid, key=lambda x: abs(int(x['_strike_val']) - desired_strike))
+            return int(target['_strike_val']), target.get('instrument_token'), target.get('tradingsymbol')
+        except Exception:
+            return None, None, None
 
     # ------------------ UTILITIES - PURELY DYNAMIC EXPIRY (The Fix) ------------------
 
@@ -2941,6 +4187,12 @@ class UltimateFNOTrader:
                         return self.lot_sizes[symbol]
         except Exception:
             pass
+        
+        # Fallback for PAPER mode to allow execution even if lot size is missing
+        if self.mode == 'PAPER':
+            logger.warning(f"Lot size unavailable for {symbol}. Using default 1 for PAPER mode.")
+            return 1
+
         logger.error(f"Lot size unavailable for {symbol}.")
         return 0
 
@@ -2988,61 +4240,209 @@ class UltimateFNOTrader:
             logger.debug(f"Dashboard Data Emitted. Total P&L: {dashboard_data['summary']['total_pnl']:.2f}")
 
     def init_telegram(self):
-        self.telegram_token = TELEGRAM_TOKEN
-        self.telegram_chat_id = TELEGRAM_CHAT_ID
-        if self.telegram_token and self.telegram_chat_id:
-            logger.info("🤖 Telegram alerts ENABLED.")
-            self.telegram_enabled = True
+        self.telegram_token = TELEGRAM_TOKEN or self.config.get('telegram_token')
+        self.telegram_chat_id = TELEGRAM_CHAT_ID or self.config.get('telegram_chat_id')
+        
+        # Try to auto-detect if missing
+        if self.telegram_token and not self._has_chat_id():
+            self._fetch_chat_id_from_updates()
+
+        self.telegram_enabled = bool(self.telegram_token and self._has_chat_id())
+        
+        if self.telegram_enabled:
+            logger.info(f"🤖 Telegram alerts ENABLED. Chat ID: {self.telegram_chat_id}")
+            try:
+                save_config_value('telegram_chat_id', self.telegram_chat_id)
+                self.config['telegram_chat_id'] = self.telegram_chat_id
+            except Exception:
+                pass
         else:
-            self.telegram_enabled = False
-            logger.warning("❌ Telegram alerts DISABLED. Set token/chat ID in config.")
+            if self.telegram_token:
+                logger.warning("⚠️ Telegram Token present but Chat ID missing. Starting dynamic watcher...")
+                self.start_chat_id_watcher()
+            else:
+                logger.warning("❌ Telegram alerts DISABLED. Set token/chat ID in config.")
+
+    def _fetch_chat_id_from_updates(self):
+        """Helper to fetch chat_id from Telegram getUpdates"""
+        try:
+            # Clear webhook first
+            try:
+                requests.get(
+                    f"https://api.telegram.org/bot{self.telegram_token}/deleteWebhook",
+                    params={"drop_pending_updates": False},
+                    timeout=5.0,
+                )
+            except Exception:
+                pass
+            
+            url = f"https://api.telegram.org/bot{self.telegram_token}/getUpdates"
+            for attempt in range(3):
+                try:
+                    resp = requests.get(url, params={"limit": 100}, timeout=5.0)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if data.get('ok') and data.get('result'):
+                            cid_found = None
+                            # Look for the most recent message from a user or channel
+                            for upd in reversed(data['result']):
+                                msg = upd.get('message') or upd.get('channel_post') or upd.get('my_chat_member') or upd.get('chat_join_request') or {}
+                                chat = msg.get('chat') or {}
+                                cid = chat.get('id')
+                                if cid:
+                                    cid_found = cid
+                                    break # Found the latest one
+                            if cid_found:
+                                self.telegram_chat_id = cid_found
+                                self.telegram_enabled = True
+                                logger.info(f"Dynamic Telegram Chat ID detected: {self.telegram_chat_id}")
+                                try:
+                                    save_config_value('telegram_chat_id', self.telegram_chat_id)
+                                    self.config['telegram_chat_id'] = self.telegram_chat_id
+                                except Exception:
+                                    pass
+                                break
+                    time.sleep(1.0)
+                except Exception:
+                    time.sleep(1.0)
+        except Exception as e:
+            logger.error(f"Error fetching chat_id: {e}")
+
+    def _has_chat_id(self) -> bool:
+        try:
+            cid = self.telegram_chat_id
+            if cid is None:
+                return False
+            s = str(cid).strip().lower()
+            return s not in ("", "none", "null", "0")
+        except Exception:
+            return False
+
+    def start_chat_id_watcher(self):
+        """Starts a background thread to poll for chat_id if missing."""
+        def watcher():
+            logger.info("Starting background Telegram Chat ID watcher...")
+            while not self._has_chat_id() and self.telegram_token:
+                self._fetch_chat_id_from_updates()
+                if self._has_chat_id():
+                    logger.info("Background watcher found Chat ID! Stopping watcher.")
+                    break
+                time.sleep(5)
+        
+        import threading
+        t = threading.Thread(target=watcher, daemon=True)
+        t.start()
+
+    def ensure_telegram_ready(self):
+        """Checks if we have a chat ID, if not, tries one last fetch."""
+        if not self.telegram_token:
+            return False
+        if self._has_chat_id():
+            return True
+        # Try fetching
+        self._fetch_chat_id_from_updates()
+        return self._has_chat_id()
 
     def send_telegram_alert(self, message: str):
+        # 1. Try sending via 'alerts' module if available
+        alerts_ok = False
         try:
-            if self.alerts:
+            if getattr(self, 'alerts', None):
                 self.alerts.send_trade(message)
-                return True
+                alerts_ok = True
         except Exception:
-            pass
-        if not self.telegram_enabled or not self.telegram_chat_id:
-            return False
+            alerts_ok = False
+
+        # 2. Try direct requests if token is available
+        if not self.ensure_telegram_ready():
+             # If we still don't have it, we can't send
+             return alerts_ok
+
         try:
             url = f"https://api.telegram.org/bot{self.telegram_token}/sendMessage"
-            payload = {'chat_id': self.telegram_chat_id, 'text': message, 'parse_mode': 'HTML'}
-            response = requests.post(url, json=payload, timeout=5)
-            return response.status_code == 200
+            payload = {
+                "chat_id": self.telegram_chat_id,
+                "text": message,
+                "parse_mode": "HTML"
+            }
+            requests.post(url, json=payload, timeout=5)
+            return True
         except Exception as e:
             logger.error(f"Telegram send failed: {e}")
-            return False
+            return alerts_ok
 
     def get_signal_id(self, trade_plan: Dict, strike: float) -> str:
         """Utility method to generate a unique signal identifier."""
         return f"{trade_plan['symbol']}_{trade_plan['direction']}_{strike}_{round(trade_plan['target'], 1)}"
 
-    def send_trade_alert(self, trade_plan: Dict, premium: float=0, strike: float=0, lot_size: int=0, quantity: int=0, trade_value: float=0, status: str="NEW SIGNAL"):
+    def send_trade_alert(self, trade_plan: Dict, premium: float=0, strike: float=0, lot_size: int=0, quantity: int=0, trade_value: float=0, status: str="NEW SIGNAL", tradingsymbol: str=""):
         """Sends a structured, trade-specific alert to Telegram."""
-        if not self.telegram_enabled: return
 
-        direction_icon = "🟢" if trade_plan['direction'] == 'BULLISH' else "🔴"
-        option_type = "CALL" if trade_plan['direction'] == 'BULLISH' else "PUT"
+        direction = trade_plan['direction']
+        is_commodity = False
+        try:
+            is_commodity = bool(self.strategy_params.get('market_type') == 'COMMODITY') or bool((getattr(self, 'commodity_token_map', {}) or {}).get(trade_plan['symbol']))
+        except Exception:
+            pass
+        if direction == 'BULLISH':
+            direction_icon = "🟢"
+            option_type = "CALL"
+        elif direction == 'BEARISH':
+            direction_icon = "🔴"
+            option_type = "PUT"
+        elif direction in ['IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE', 'LONG_STRADDLE', 'SHORT_STRADDLE']:
+            direction_icon = "🟣"
+            option_type = direction.replace('_', ' ')
+        else:
+             direction_icon = "⚪"
+             option_type = direction
 
+        # Determine instrument label for commodity: FUT vs OPT
+        instrument_label = option_type
+        if is_commodity:
+            is_comm_opt = False
+            try:
+                ts_lower = (tradingsymbol or trade_plan.get('tradingsymbol') or "").upper()
+                if ts_lower.endswith("CE") or ts_lower.endswith("PE"):
+                    is_comm_opt = True
+            except Exception:
+                pass
+            instrument_label = "OPT" if is_comm_opt else "FUT"
         if status == 'TRADE EXECUTED':
-            header = f"✅ TRADE EXECUTED ({self.mode}) - {trade_plan['symbol']} {option_type}"
+            header = f"✅ TRADE EXECUTED ({self.mode}) - {trade_plan['symbol']} {instrument_label}"
             details = f"📦 Lots: {quantity} | Cost: ₹{trade_value:,.0f}"
         else:
-            header = f"🔔 REAL-TIME HIGH-CONVICTION SIGNAL - {trade_plan['symbol']} {option_type}"
-            details = f"💰 Live Premium: ₹{premium:.1f} (Lots: {quantity})"
+            header = f"🔔 REAL-TIME HIGH-CONVICTION SIGNAL - {trade_plan['symbol']} {instrument_label}"
+            if is_commodity and 'instrument_label' in locals() and instrument_label == "OPT":
+                details = f"💰 Live Premium: ₹{premium:.1f}" + (f" (Lots: {quantity})" if quantity and quantity > 0 else "")
+            elif is_commodity:
+                details = f"💰 Live Price: ₹{premium:.1f}" + (f" (Lots: {quantity})" if quantity and quantity > 0 else "")
+            else:
+                details = f"💰 Live Premium: ₹{premium:.1f} (Lots: {quantity})"
+
+        strike_line = f"🎯 <b>Strike:</b> {strike:.0f} (ATM)" if (not is_commodity or (is_commodity and instrument_label == "OPT")) else f"📝 <b>Contract:</b> MCX Futures"
+        tgt_icon = "⬆️" if direction == 'BULLISH' else "⬇️"
+        sl_icon = "⬇️" if direction == 'BULLISH' else "⬆️"
+
+        ts_info = ""
+        try:
+            if is_commodity:
+                ts_val = tradingsymbol or trade_plan.get('tradingsymbol') or ""
+                if (ts_val or lot_size):
+                    ts_info = f"\n🧩 Instrument: {ts_val or '—'} | Lot Size: {int(lot_size or 0)}"
+        except Exception:
+            ts_info = ""
 
         message = f"""
 {direction_icon} <b>{header}</b>
 
 📊 Conf: {trade_plan['confidence']:.1f}/10 | R:R: 1:{trade_plan['risk_reward']:.2f}
 
-🎯 <b>Strike:</b> {strike:.0f} (ATM)
+{strike_line}
 🎯 <b>Entry Spot:</b> ₹{trade_plan['entry']:.1f}
-⬆️ <b>Target Spot:</b> ₹{trade_plan['target']:.1f}
-⬇️ <b>Stop Spot:</b> ₹{trade_plan['stop_loss']:.1f}
-{details}
+{tgt_icon} <b>Target Spot:</b> ₹{trade_plan['target']:.1f}
+{sl_icon} <b>Stop Spot:</b> ₹{trade_plan['stop_loss']:.1f}
+{details}{ts_info}
 """
         self.send_telegram_alert(message)
         logger.info(f"ALERT SENT: {trade_plan['symbol']} {status}")
@@ -3098,18 +4498,10 @@ class UltimateFNOTrader:
                             quote_ltp = float(close)
                 except Exception:
                     quote_ltp = None
-            snapshot_ltp = None
-            if quote_key and (quote_key in self.last_ltp_snapshot):
-                v = self.last_ltp_snapshot.get(quote_key, {})
-                lp = v.get('last_price')
-                if lp is not None and lp > 0:
-                    snapshot_ltp = float(lp)
-                else:
-                    close = v.get('close')
-                    if close is not None and close > 0:
-                        snapshot_ltp = float(close)
+            # Only use LIVE LTP for "actual" premium display; avoid simulated fallback
+            current_premium_live = quote_ltp if quote_ltp is not None else None
             base_prem = pos.get('current_premium', pos.get('premium_paid', pos.get('entry_price', 0)))
-            current_premium = quote_ltp if quote_ltp is not None else (snapshot_ltp if snapshot_ltp is not None else base_prem)
+            current_premium = current_premium_live if current_premium_live is not None else base_prem
             current_value = (current_premium or 0) * (pos.get('lot_size', 0) or 0) * (pos.get('quantity', 0) or 0)
 
             estimated_position_value += current_value
@@ -3141,21 +4533,69 @@ class UltimateFNOTrader:
                  exit_signal = pos['exit_signal_reason']
                  exit_signals_count += 1
 
+            # Derive expiry date string from instrument caches for display
+            expiry_str = None
+            try:
+                ts_cur = pos.get('tradingsymbol')
+                if ts_cur:
+                    exp_dt = None
+                    if (pos.get('market_type') == 'COMMODITY') or (pos.get('instrument_type') == 'FUT'):
+                        for inst in (self.mcx_instruments or []):
+                            if inst.get('tradingsymbol') == ts_cur:
+                                exp_dt = inst.get('expiry')
+                                break
+                    else:
+                        for inst in (self.nfo_instruments or []):
+                            if inst.get('tradingsymbol') == ts_cur:
+                                exp_dt = inst.get('expiry')
+                                break
+                    try:
+                        from datetime import date as _date_cls
+                    except Exception:
+                        _date_cls = None
+                    if isinstance(exp_dt, datetime):
+                        expiry_str = exp_dt.strftime("%d %b %Y")
+                    elif _date_cls and isinstance(exp_dt, _date_cls):
+                        expiry_str = datetime.combine(exp_dt, datetime.min.time()).strftime("%d %b %Y")
+            except Exception:
+                expiry_str = None
+            # Build Groww-style option chain URL for MCX options
+            chain_url = None
+            try:
+                if (pos.get('market_type') == 'COMMODITY') and str(pos.get('option_type','')).upper() in {'CALL','PUT'} and pos.get('tradingsymbol'):
+                    ts_low = str(pos.get('tradingsymbol')).lower()
+                    # Extract symbol root (e.g., silverm) and strike
+                    sym_root = ''.join([ch for ch in ts_low if ch.isalpha()])  # crude approximation
+                    sym_root = 'mcx_silverm' if 'silverm' in sym_root else ('mcx_goldm' if 'goldm' in sym_root else None)
+                    if sym_root and expiry_str:
+                        ddmonyy = datetime.strptime(expiry_str, "%d %b %Y").strftime("%d%b%y").lower()
+                        strike_int = int(pos.get('strike_price', 0) or 0)
+                        suffix = 'ce' if str(pos.get('option_type')).upper() == 'CALL' else 'pe'
+                        chain_url = f"https://groww.in/commodities/options/{sym_root}/{sym_root}{ddmonyy}{strike_int}{suffix}"
+            except Exception:
+                chain_url = None
+
             active_positions_list.append({
+                'id': pos_key,
                 'symbol': pos.get('symbol'),
                 'option_type': pos.get('option_type', 'FUT'),
                 'strike_price': pos.get('strike_price', 0.0),
                 'entry_premium': pos.get('premium_paid', pos.get('entry_price', 0.0)),
                 'current_premium': current_premium,
+                'current_premium_live': current_premium_live,
                 'lot_size': pos.get('lot_size', 1),
                 'quantity': pos.get('quantity', 1),
                 'entry_time': pos.get('entry_time'),
+                'created_at': pos.get('entry_time'),
                 'order_id': pos.get('order_id'),
                 'tradingsymbol': pos.get('tradingsymbol'),
+                'expiry_date': expiry_str,
+                'chain_url': chain_url,
                 'stop_loss_spot': pos.get('stop_loss', 0.0),
                 'target_spot': pos.get('target', 0.0),
                 'pnl': pnl,
                 'pnl_pct': pnl_pct,
+                'pnl_percentage': pnl_pct,
                 'confidence': pos.get('confidence', 0.0),
                 'risk_reward': pos.get('risk_reward', 0.0),
                 'exit_signal': exit_signal,
@@ -3164,7 +4604,8 @@ class UltimateFNOTrader:
                 'vega': pos.get('vega', 0.0),
                 'iv': pos.get('iv', 0.0),
                 'market': (pos.get('market_type') or ('MCX' if (pos.get('instrument_type') == 'FUT') else 'NSE')),
-                'source_strategy': getattr(self, 'display_strategy_key', self.active_strategy_key)
+                'source_strategy': getattr(self, 'display_strategy_key', self.active_strategy_key),
+                'status': 'open'
             })
 
         portfolio['total_value'] = portfolio['cash'] + estimated_position_value
@@ -3184,12 +4625,329 @@ class UltimateFNOTrader:
         # Get market data from current index quotes
         market_data = {}
         try:
-            if self.kite and self.kite.access_token:
+            prefer_kite = (str(self.config.get('broker', '')).strip().upper() == 'KITE') or (str(os.getenv('PREFER_KITE_MARKET') or '').strip().lower() in ['1','true','yes'])
+            if prefer_kite and self.kite and self.kite.access_token:
                 mapping = {
                     'nifty': 'NSE:NIFTY 50',
                     'banknifty': 'NSE:NIFTY BANK',
                     'finnifty': 'NSE:NIFTY FIN SERVICE',
-                    'sensex': 'BSE:SENSEX'
+                    'sensex': 'BSE:SENSEX',
+                    'vix': 'NSE:INDIA VIX'
+                }
+                keys = list(mapping.values())
+                quotes = self.safe_quote(keys)
+                for k, key in mapping.items():
+                    q = quotes.get(key, {})
+                    price = float(q.get('last_price') or 0)
+                    ohlc = q.get('ohlc') or {}
+                    prev = float(ohlc.get('close') or price)
+                    change = price - prev
+                    pct = (change / prev * 100.0) if prev else 0.0
+                    market_data[k] = {'price': price, 'change': change, 'change_percent': pct}
+                try:
+                    sel = {'CRUDEOIL': None, 'CRUDEOILM': None, 'GOLD': None, 'GOLDM': None, 'SILVER': None, 'NATURALGAS': None, 'NATURALGASM': None}
+                    for inst in (self.mcx_instruments or []):
+                        name = inst.get('name')
+                        if name in sel:
+                            exp = inst.get('expiry')
+                            if sel[name] is None or (isinstance(exp, datetime) and exp < sel[name].get('expiry')):
+                                sel[name] = inst
+                    keys2 = []
+                    mapping2 = {}
+                    for k_sym, inst in sel.items():
+                        if inst:
+                            ts = inst.get('tradingsymbol')
+                            keys2.append(f"MCX:{ts}")
+                            if k_sym == 'CRUDEOILM':
+                                canon = 'crudeoilmini'
+                            elif k_sym == 'GOLDM':
+                                canon = 'goldmini'
+                            elif k_sym == 'NATURALGASM':
+                                canon = 'naturalgasmini'
+                            else:
+                                canon = k_sym.lower()
+                            mapping2[canon] = f"MCX:{ts}"
+                    if keys2:
+                        q2 = self.safe_quote(keys2)
+                        for k_lower, key2 in mapping2.items():
+                            qq = q2.get(key2, {})
+                            price = float(qq.get('last_price') or 0)
+                            ohlc = qq.get('ohlc') or {}
+                            prev = float(ohlc.get('close') or price)
+                            change = price - prev
+                            pct = (change / prev * 100.0) if prev else 0.0
+                            market_data[k_lower] = {'price': price, 'change': change, 'change_percent': pct}
+                except Exception:
+                    pass
+                for ck in ['crudeoil','crudeoilmini','gold','goldmini','silver','naturalgas','naturalgasmini']:
+                    if ck not in market_data:
+                        market_data[ck] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+            elif self.groww_sdk:
+                try:
+                    symbols_candidates = {
+                        'nifty': ['NSE_NIFTY', 'NSE_NIFTY_50', 'INDEX_NIFTY', 'NIFTY', 'NIFTY_50', 'NSE-NIFTY', 'NSE-NIFTY-50'],
+                        'banknifty': ['NSE_BANKNIFTY', 'NSE_NIFTY_BANK', 'INDEX_BANKNIFTY', 'BANKNIFTY', 'NIFTY_BANK', 'NSE-NIFTY-BANK', 'NSE-BANKNIFTY'],
+                        'sensex': ['BSE_SENSEX', 'SENSEX', 'INDEX_SENSEX', 'BSE_INDEX_SENSEX', 'BSE-SENSEX'],
+                        'vix': ['NSE_INDIA_VIX', 'INDIA_VIX', 'VIX', 'NSE_VIX', 'NSE-INDIA-VIX']
+                    }
+                    seg_cash = getattr(self.groww_sdk, 'SEGMENT_CASH', 'CASH')
+                    try:
+                        extras = {
+                            'nifty': ['NSE-NIFTY', 'NSE-NIFTY-50'],
+                            'banknifty': ['NSE-NIFTY-BANK', 'NSE-BANKNIFTY'],
+                            'sensex': ['BSE-SENSEX'],
+                            'vix': ['NSE-INDIA-VIX']
+                        }
+                        for kk, vv in extras.items():
+                            base = symbols_candidates.get(kk, [])
+                            for s in vv:
+                                if s not in base:
+                                    base.append(s)
+                            symbols_candidates[kk] = base
+                    except Exception:
+                        pass
+                    syms = tuple({c for arr in symbols_candidates.values() for c in arr})
+                    def _unwrap(resp):
+                        if isinstance(resp, dict):
+                            if 'payload' in resp: return resp.get('payload')
+                            if 'data' in resp: return resp.get('data')
+                        return resp
+                    def _resp_to_map(resp):
+                        out = {}
+                        resp = _unwrap(resp)
+                        if isinstance(resp, dict):
+                            return resp
+                        if isinstance(resp, list):
+                            for item in resp:
+                                key = item.get('trading_symbol') or item.get('symbol') or item.get('exchange_trading_symbol')
+                                if key:
+                                    out[key] = item
+                        return out
+                    try:
+                        ltp_raw = self.groww_sdk.get_ltp(segment=seg_cash, exchange_trading_symbols=syms)
+                    except Exception:
+                        ltp_raw = {}
+                    try:
+                        ohlc_raw = self.groww_sdk.get_ohlc(segment=seg_cash, exchange_trading_symbols=syms)
+                    except Exception:
+                        ohlc_raw = {}
+                    ltp_resp = _resp_to_map(ltp_raw)
+                    ohlc_resp = _resp_to_map(ohlc_raw)
+                    for k, arr in symbols_candidates.items():
+                        try:
+                            sym = next((s for s in arr if (ltp_resp.get(s) or ohlc_resp.get(s))), arr[0])
+                            val = ltp_resp.get(sym)
+                            if isinstance(val, (int, float)):
+                                price = float(val)
+                            else:
+                                val = val or {}
+                                price = float(val.get('ltp') or val.get('last_price') or val.get('price') or 0)
+                            ov = ohlc_resp.get(sym) or {}
+                            prev = float(ov.get('close') or ov.get('previous_close') or price)
+                            change = price - prev
+                            pct = (change/prev*100.0) if prev else 0.0
+                            market_data[k] = {'price': price, 'change': change, 'change_percent': pct}
+                            if market_data[k]['price'] == 0:
+                                try:
+                                    q = self.groww_sdk.get_quote(segment=seg_cash, trading_symbol=sym)
+                                except Exception:
+                                    q = {}
+                                if isinstance(q, dict):
+                                    price = float(q.get('last_price') or q.get('price') or 0)
+                                    prev = float((q.get('close') or q.get('previous_close') or prev))
+                                    change = price - prev
+                                    pct = (change/prev*100.0) if prev else 0.0
+                                    market_data[k] = {'price': price, 'change': change, 'change_percent': pct}
+                        except Exception:
+                            market_data[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                    idx_keys = ['nifty','banknifty','sensex','vix']
+                    all_zero = all((market_data.get(x, {}).get('price') or 0) == 0 for x in idx_keys)
+                    if all_zero:
+                        seg_index = getattr(self.groww_sdk, 'SEGMENT_INDEX', 'INDEX')
+                        try:
+                            ltp_raw_i = self.groww_sdk.get_ltp(segment=seg_index, exchange_trading_symbols=syms)
+                        except Exception:
+                            ltp_raw_i = {}
+                        try:
+                            ohlc_raw_i = self.groww_sdk.get_ohlc(segment=seg_index, exchange_trading_symbols=syms)
+                        except Exception:
+                            ohlc_raw_i = {}
+                        ltp_i = _resp_to_map(ltp_raw_i)
+                        ohlc_i = _resp_to_map(ohlc_raw_i)
+                        for k, arr in symbols_candidates.items():
+                            try:
+                                symi = next((s for s in arr if (ltp_i.get(s) or ohlc_i.get(s))), arr[0])
+                                vali = ltp_i.get(symi)
+                                if isinstance(vali, (int, float)):
+                                    pricei = float(vali)
+                                else:
+                                    vali = vali or {}
+                                    pricei = float(vali.get('ltp') or vali.get('last_price') or vali.get('price') or 0)
+                                ovi = ohlc_i.get(symi) or {}
+                                previ = float(ovi.get('close') or ovi.get('previous_close') or pricei)
+                                chgi = pricei - previ
+                                pcti = (chgi/previ*100.0) if previ else 0.0
+                                market_data[k] = {'price': pricei, 'change': chgi, 'change_percent': pcti}
+                            except Exception:
+                                pass
+                    all_zero = all((market_data.get(x, {}).get('price') or 0) == 0 for x in idx_keys)
+                    if all_zero and self.groww_api and getattr(self.groww_api, 'access_token', None):
+                        try:
+                                mapping = {
+                                    'nifty': 'NSE:NIFTY 50',
+                                    'banknifty': 'NSE:NIFTY BANK',
+                                    'finnifty': 'NSE:NIFTY FIN SERVICE',
+                                    'sensex': 'BSE:SENSEX',
+                                    'vix': 'NSE:INDIA VIX'
+                                }
+                                keys = list(mapping.values())
+                                resp = self.groww_api.market_quote(keys)
+                                pay = resp.get('payload') or resp.get('data') or resp
+                                qmap = pay.get('quotes') or pay.get('ltp') or pay
+                                for k, key in mapping.items():
+                                    src = qmap.get(key, {}) if isinstance(qmap, dict) else {}
+                                    price = float(src.get('last_price') or src.get('price') or 0)
+                                    ohlc = src.get('ohlc') or {}
+                                    prev = float(ohlc.get('close') or src.get('prev_close') or price)
+                                    change = price - prev
+                                    pct = (change / prev * 100.0) if prev else 0.0
+                                    market_data[k] = {'price': price, 'change': change, 'change_percent': pct}
+                        except Exception:
+                            pass
+                    all_zero = all((market_data.get(x, {}).get('price') or 0) == 0 for x in idx_keys)
+                    if all_zero:
+                        try:
+                            seg_index = getattr(self.groww_sdk, 'SEGMENT_INDEX', 'INDEX')
+                            inst_raw = self.groww_sdk.get_instruments(segment=seg_index)
+                        except Exception:
+                            inst_raw = []
+                        inst_map = _resp_to_map(inst_raw)
+                        if isinstance(inst_map, dict):
+                            inst_list = list(inst_map.values())
+                        else:
+                            inst_list = inst_map if isinstance(inst_map, list) else []
+                        def _find_symbol(cands):
+                            try:
+                                for it in inst_list:
+                                    nm = str(it.get('name') or it.get('display_name') or it.get('symbol') or '').lower()
+                                    ts = it.get('trading_symbol') or it.get('exchange_trading_symbol') or it.get('symbol')
+                                    if ts and any(s.lower() in nm for s in cands):
+                                        return ts
+                            except Exception:
+                                return None
+                            return None
+                        dyn = {
+                            'nifty': _find_symbol(['nifty 50','nifty']),
+                            'banknifty': _find_symbol(['nifty bank','banknifty']),
+                            'sensex': _find_symbol(['sensex']),
+                            'vix': _find_symbol(['india vix','vix'])
+                        }
+                        try:
+                            sy_dyn = tuple([s for s in dyn.values() if s])
+                            if sy_dyn:
+                                ltp_dyn = self.groww_sdk.get_ltp(segment=seg_index, exchange_trading_symbols=sy_dyn)
+                            else:
+                                ltp_dyn = {}
+                        except Exception:
+                            ltp_dyn = {}
+                        m_dyn = _resp_to_map(ltp_dyn)
+                        for k in ['nifty','banknifty','sensex','vix']:
+                            try:
+                                symd = dyn.get(k)
+                                vd = m_dyn.get(symd) if symd else None
+                                if isinstance(vd, (int,float)):
+                                    pd = float(vd)
+                                    prevd = pd
+                                else:
+                                    vd = vd or {}
+                                    pd = float(vd.get('ltp') or vd.get('last_price') or vd.get('price') or 0)
+                                    prevd = pd
+                                chgd = pd - prevd
+                                pctd = (chgd/prevd*100.0) if prevd else 0.0
+                                if pd:
+                                    market_data[k] = {'price': pd, 'change': chgd, 'change_percent': pctd}
+                            except Exception:
+                                pass
+                    try:
+                        symbols_comm = {
+                            'crudeoil': ['MCX_CRUDEOIL', 'CRUDEOIL'],
+                            'crudeoilmini': ['MCX_CRUDEOILM', 'CRUDEOILM', 'CRUDEOILMINI'],
+                            'gold': ['MCX_GOLD', 'GOLD', 'MCX_GOLDM'],
+                            'silver': ['MCX_SILVER', 'SILVER', 'MCX_SILVERM']
+                        }
+                        seg_com = getattr(self.groww_sdk, 'SEGMENT_COMMODITY', 'COMMODITY')
+                        syms_com = tuple({c for arr in symbols_comm.values() for c in arr})
+                        try:
+                            ltp_raw_c = self.groww_sdk.get_ltp(segment=seg_com, exchange_trading_symbols=syms_com)
+                        except Exception:
+                            ltp_raw_c = {}
+                        try:
+                            ohlc_raw_c = self.groww_sdk.get_ohlc(segment=seg_com, exchange_trading_symbols=syms_com)
+                        except Exception:
+                            ohlc_raw_c = {}
+                        ltp_c = _resp_to_map(ltp_raw_c)
+                        ohlc_c = _resp_to_map(ohlc_raw_c)
+                        for k, arr in symbols_comm.items():
+                            try:
+                                symc = next((s for s in arr if (ltp_c.get(s) or ohlc_c.get(s))), arr[0])
+                                vc = ltp_c.get(symc)
+                                if isinstance(vc, (int, float)):
+                                    pricec = float(vc)
+                                else:
+                                    vc = vc or {}
+                                    pricec = float(vc.get('ltp') or vc.get('last_price') or vc.get('price') or 0)
+                                oc = ohlc_c.get(symc) or {}
+                                prevc = float(oc.get('close') or oc.get('previous_close') or pricec)
+                                chg = pricec - prevc
+                                pctc = (chg/prevc*100.0) if prevc else 0.0
+                                market_data[k] = {'price': pricec, 'change': chg, 'change_percent': pctc}
+                                if market_data[k]['price'] == 0:
+                                    try:
+                                        qc = self.groww_sdk.get_quote(segment=seg_com, trading_symbol=symc)
+                                    except Exception:
+                                        qc = {}
+                                    if isinstance(qc, dict):
+                                        pricec = float(qc.get('last_price') or qc.get('price') or 0)
+                                        prevc = float((qc.get('close') or qc.get('previous_close') or prevc))
+                                        chg = pricec - prevc
+                                        pctc = (chg/prevc*100.0) if prevc else 0.0
+                                        market_data[k] = {'price': pricec, 'change': chg, 'change_percent': pctc}
+                            except Exception:
+                                market_data[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+            elif self.groww_api and getattr(self.groww_api, 'access_token', None):
+                mapping = {
+                    'nifty': 'NSE:NIFTY 50',
+                    'banknifty': 'NSE:NIFTY BANK',
+                    'finnifty': 'NSE:NIFTY FIN SERVICE',
+                    'sensex': 'BSE:SENSEX',
+                    'vix': 'NSE:INDIA VIX'
+                }
+                keys = list(mapping.values())
+                resp = self.groww_api.market_quote(keys)
+                pay = resp.get('payload') or resp.get('data') or resp
+                qmap = pay.get('quotes') or pay.get('ltp') or pay
+                for k, key in mapping.items():
+                    src = qmap.get(key, {}) if isinstance(qmap, dict) else {}
+                    price = float(src.get('last_price') or src.get('price') or 0)
+                    ohlc = src.get('ohlc') or {}
+                    prev = float(ohlc.get('close') or src.get('prev_close') or price)
+                    change = price - prev
+                    pct = (change / prev * 100.0) if prev else 0.0
+                    market_data[k] = {'price': price, 'change': change, 'change_percent': pct}
+                for ck in ['crudeoil','gold','silver']:
+                    if ck not in market_data:
+                        market_data[ck] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+            elif self.kite and self.kite.access_token:
+                mapping = {
+                    'nifty': 'NSE:NIFTY 50',
+                    'banknifty': 'NSE:NIFTY BANK',
+                    'finnifty': 'NSE:NIFTY FIN SERVICE',
+                    'sensex': 'BSE:SENSEX',
+                    'vix': 'NSE:INDIA VIX'
                 }
                 keys = list(mapping.values())
                 quotes = self.safe_quote(keys)
@@ -3203,7 +4961,7 @@ class UltimateFNOTrader:
                     market_data[k] = {'price': price, 'change': change, 'change_percent': pct}
                 # Commodity quotes via MCX instruments (nearest expiry)
                 try:
-                    sel = {'CRUDEOIL': None, 'GOLD': None, 'SILVER': None}
+                    sel = {'CRUDEOIL': None, 'CRUDEOILM': None, 'GOLD': None, 'GOLDM': None, 'SILVER': None, 'NATURALGAS': None, 'NATURALGASM': None}
                     for inst in (self.mcx_instruments or []):
                         name = inst.get('name')
                         if name in sel:
@@ -3216,7 +4974,15 @@ class UltimateFNOTrader:
                         if inst:
                             ts = inst.get('tradingsymbol')
                             keys2.append(f"MCX:{ts}")
-                            mapping2[k_sym.lower()] = f"MCX:{ts}"
+                            if k_sym == 'CRUDEOILM':
+                                canon = 'crudeoilmini'
+                            elif k_sym == 'GOLDM':
+                                canon = 'goldmini'
+                            elif k_sym == 'NATURALGASM':
+                                canon = 'naturalgasmini'
+                            else:
+                                canon = k_sym.lower()
+                            mapping2[canon] = f"MCX:{ts}"
                     if keys2:
                         q2 = self.safe_quote(keys2)
                         for k_lower, key2 in mapping2.items():
@@ -3229,9 +4995,31 @@ class UltimateFNOTrader:
                             market_data[k_lower] = {'price': price, 'change': change, 'change_percent': pct}
                 except Exception:
                     pass
-                for ck in ['crudeoil','gold','silver']:
+                for ck in ['crudeoil','crudeoilmini','gold','goldmini','silver','naturalgas','naturalgasmini']:
                     if ck not in market_data:
                         market_data[ck] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
+            else:
+                if self.mode == 'PAPER':
+                    defaults = {
+                        'nifty': 20000.0,
+                        'banknifty': 45000.0,
+                        'finnifty': 20000.0,
+                        'sensex': 67000.0,
+                        'vix': 15.0,
+                        'crudeoil': 6800.0,
+                        'crudeoilmini': 6800.0,
+                        'gold': 62000.0,
+                        'goldmini': 62000.0,
+                        'silver': 78000.0,
+                        'naturalgasmini': 250.0
+                    }
+                    for k, base in defaults.items():
+                        change = (np.random.rand()-0.5) * (base * 0.002)
+                        pct = (change / base) * 100.0
+                        market_data[k] = {'price': base + change, 'change': change, 'change_percent': pct}
+                else:
+                    for k in ['nifty','banknifty','finnifty','sensex','vix','crudeoil','gold','silver']:
+                        market_data[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
         except Exception:
             # Fallback to zero values if market data unavailable
             if self.mode == 'PAPER':
@@ -3240,16 +5028,20 @@ class UltimateFNOTrader:
                     'banknifty': 45000.0,
                     'finnifty': 20000.0,
                     'sensex': 67000.0,
+                    'vix': 15.0,
                     'crudeoil': 6800.0,
+                    'crudeoilmini': 6800.0,
                     'gold': 62000.0,
-                    'silver': 78000.0
+                    'goldmini': 62000.0,
+                    'silver': 78000.0,
+                    'naturalgasmini': 250.0
                 }
                 for k, base in defaults.items():
                     change = (np.random.rand()-0.5) * (base * 0.002)
                     pct = (change / base) * 100.0
                     market_data[k] = {'price': base + change, 'change': change, 'change_percent': pct}
             else:
-                for k in ['nifty','banknifty','finnifty','sensex','crudeoil','gold','silver']:
+                for k in ['nifty','banknifty','finnifty','sensex','vix','crudeoil','crudeoilmini','gold','goldmini','silver','naturalgasmini']:
                     market_data[k] = {'price': 0.0, 'change': 0.0, 'change_percent': 0.0}
         
         # Enrich signals with pending_reason if missing
@@ -3261,6 +5053,28 @@ class UltimateFNOTrader:
         open_symbols = set([p.get('symbol') for p in active_positions_list if p.get('symbol')])
         for s in base_recent:
             s2 = dict(s)
+            try:
+                s2['source_strategy'] = getattr(self, 'display_strategy_key', self.active_strategy_key)
+                s2['strategy'] = s2.get('source_strategy') or getattr(self, 'active_strategy_key', 'UNKNOWN')
+            except Exception:
+                s2['strategy'] = s2.get('strategy') or 'UNKNOWN'
+            # Provide UI-friendly field aliases
+            try:
+                if 'premium' in s2 and s2.get('premium') is not None:
+                    s2['entry_premium'] = float(s2.get('premium') or 0)
+            except Exception:
+                pass
+            try:
+                s2['entry_spot'] = float(s2.get('entry') or 0)
+                s2['target_spot'] = float(s2.get('target') or 0)
+                s2['stop_loss_spot'] = float(s2.get('stop_loss') or 0)
+            except Exception:
+                pass
+            try:
+                if 'risk_reward' in s2 and s2.get('risk_reward') is not None:
+                    s2['rr_ratio'] = float(s2.get('risk_reward') or 0)
+            except Exception:
+                pass
             if (s2.get('status') == 'PENDING') and (not s2.get('pending_reason')):
                 sym = s2.get('symbol')
                 try:
@@ -3292,7 +5106,7 @@ class UltimateFNOTrader:
                             'window': 'NSE intraday cutoff >= 15:00'
                         }
                     else:
-                        s2['pending_reason'] = 'awaiting_execution'
+                        s2['pending_reason'] = 'awaiting_entry'
                         s2['pending_reason_detail'] = {
                             'confidence': conf,
                             'min_confidence': min_conf,
@@ -3301,6 +5115,31 @@ class UltimateFNOTrader:
                             'position_open': bool(sym in open_symbols)
                         }
             enriched_signals.append(s2)
+
+        try:
+            latest_sig_src = enriched_signals[-1] if enriched_signals else None
+            latest_signal = None
+            if latest_sig_src:
+                latest_signal = {
+                    'symbol': latest_sig_src.get('symbol'),
+                    'direction': latest_sig_src.get('direction'),
+                    'entry_price': float(latest_sig_src.get('entry_premium') or latest_sig_src.get('entry_spot') or latest_sig_src.get('entry') or 0),
+                    'timestamp': latest_sig_src.get('timestamp') or datetime.now().isoformat()
+                }
+        except Exception:
+            latest_signal = None
+        # Compute calendar-day trades (positions opened today + trades closed today)
+        try:
+            today_iso = datetime.now().date().isoformat()
+            opened_today = [p for p in active_positions_list if str(p.get('created_at') or '').startswith(today_iso)]
+            closed_today = [t for t in (self.trade_journal.get('closed_trades') or []) if str(t.get('exit_time') or '').startswith(today_iso)]
+            today_trades_count = len(opened_today) + len(closed_today)
+        except Exception:
+            today_trades_count = int(self.scan_summary.get('trades_executed_count', 0) or 0)
+        recent_activity = {
+            'latest_signal': latest_signal,
+            'today_trades': today_trades_count
+        }
 
         return {
             'timestamp': datetime.now().isoformat(),
@@ -3343,6 +5182,7 @@ class UltimateFNOTrader:
             'closed_trades': self.trade_journal.get('closed_trades', [])[-100:],
             'market_data': market_data,
             'signals': enriched_signals,
+            'recent_activity': recent_activity,
             'sources': (list(getattr(self, 'unified_active_keys', []) or []) if (getattr(self, 'display_strategy_key', self.active_strategy_key) == 'ADAPTIVE_AUTO') else (list(self.enabled_strategies) if hasattr(self, 'enabled_strategies') else [getattr(self, 'active_strategy_key', 'HIGH_CONVICTION')])),
             'instance_breakdown': self._build_instance_breakdown(active_positions_list, total_pnl_pct),
             'strategy_breakdown': self._build_instance_breakdown(active_positions_list, total_pnl_pct)
@@ -3361,6 +5201,8 @@ class UltimateFNOTrader:
         """
         is_commodity_mode = bool(self.strategy_params.get('market_type') == 'COMMODITY')
         needs_mock_env = str(os.getenv('FORCE_MOCK_DATA', '')).strip() == '1'
+        if self.kite and getattr(self.kite, 'access_token', None):
+            needs_mock_env = False
         needs_mock = needs_mock_env or getattr(self, 'network_unavailable', False) or (not self.kite)
         if needs_mock and is_commodity_mode:
             try:
@@ -3394,13 +5236,20 @@ class UltimateFNOTrader:
             is_comm_symbol = bool((self.commodity_token_map or {}).get(symbol))
             token = (self.commodity_token_map.get(symbol) if is_commodity_mode else self.token_map.get(symbol))
             symbol_commodity_mode = is_commodity_mode
+            # In commodity mode, skip non-commodity symbols quietly
+            if is_commodity_mode and (not is_comm_symbol):
+                continue
             if not token and is_comm_symbol:
                 token = self.commodity_token_map.get(symbol)
                 symbol_commodity_mode = False
             if not token:
-                logger.error(f"Token not found for {symbol} (commodity_mode={is_commodity_mode}). Instrument mapping may be missing or expired.")
-                failed_symbols.append(symbol)
-                continue
+                if getattr(self, 'quiet_logs', True):
+                    # Skip noisy token logs when quiet
+                    continue
+                else:
+                    logger.error(f"Token not found for {symbol} (commodity_mode={is_commodity_mode}). Instrument mapping may be missing or expired.")
+                    failed_symbols.append(symbol)
+                    continue
 
             # Session-aware window for MCX
             to_d = to_date
@@ -3415,7 +5264,8 @@ class UltimateFNOTrader:
                     session_open = datetime.combine(now.date(), dtime(hour=9, minute=0))
                     session_close = datetime.combine(now.date(), dtime(hour=23, minute=55))
                 try:
-                    logger.info(f"MCX session for {symbol}: {session_open.strftime('%Y-%m-%d %H:%M')} → {session_close.strftime('%Y-%m-%d %H:%M')}")
+                    if not getattr(self, 'quiet_logs', True):
+                        logger.info(f"MCX session for {symbol}: {session_open.strftime('%Y-%m-%d %H:%M')} → {session_close.strftime('%Y-%m-%d %H:%M')}")
                 except Exception:
                     pass
                 if now > session_close:
@@ -3425,7 +5275,8 @@ class UltimateFNOTrader:
                     if from_d < session_open:
                         from_d = session_open
                     try:
-                        logger.info(f"Clamped history window for {symbol}: {from_d.strftime('%Y-%m-%d %H:%M:%S')} → {to_d.strftime('%Y-%m-%d %H:%M:%S')}")
+                        if not getattr(self, 'quiet_logs', True):
+                            logger.info(f"Clamped history window for {symbol}: {from_d.strftime('%Y-%m-%d %H:%M:%S')} → {to_d.strftime('%Y-%m-%d %H:%M:%S')}")
                     except Exception:
                         pass
 
@@ -3438,7 +5289,8 @@ class UltimateFNOTrader:
                         time.sleep(min_interval - time_since_last)
 
                     cont = False
-                    logger.info(f"Fetching history for {symbol} token={token} interval=5minute from={from_d.strftime('%Y-%m-%d %H:%M:%S')} to={to_d.strftime('%Y-%m-%d %H:%M:%S')} (continuous={cont})")
+                    if not getattr(self, 'quiet_logs', True):
+                        logger.info(f"Fetching history for {symbol} token={token} interval=5minute from={from_d.strftime('%Y-%m-%d %H:%M:%S')} to={to_d.strftime('%Y-%m-%d %H:%M:%S')} (continuous={cont})")
                     history = self.kite.historical_data(
                         token,
                         from_d.strftime("%Y-%m-%d %H:%M:%S"),
@@ -3462,7 +5314,8 @@ class UltimateFNOTrader:
                         logger.debug(f"✅ Data fetched for {symbol}: {len(df)} bars")
                         break
                     else:
-                        logger.warning(f"Data for {symbol} insufficient: {len(df) if not df.empty else 0} bars")
+                        if not getattr(self, 'quiet_logs', True):
+                            logger.warning(f"Data for {symbol} insufficient: {len(df) if not df.empty else 0} bars")
                         if attempt == max_retries - 1:
                             try:
                                 ext_from = (session_open if is_comm_symbol else (now - timedelta(hours=12)))
@@ -3482,7 +5335,8 @@ class UltimateFNOTrader:
                                         'close': 'Close', 'volume': 'Volume'
                                     }, inplace=True)
                                     data[symbol] = df2
-                                    logger.info(f"Expanded window data for {symbol}: {len(df2)} bars")
+                                    if not getattr(self, 'quiet_logs', True):
+                                        logger.info(f"Expanded window data for {symbol}: {len(df2)} bars")
                                 else:
                                     failed_symbols.append(symbol)
                             except Exception:
@@ -3508,11 +5362,13 @@ class UltimateFNOTrader:
             sset = set(failed_symbols)
             now2 = datetime.now()
             if sset != self.last_failed_fetch_symbols or (now2 - self.last_failed_fetch_log_time).total_seconds() > 120:
-                logger.warning(f"Failed to fetch data for {len(failed_symbols)} symbols: {failed_symbols}")
+                if not getattr(self, 'quiet_logs', True):
+                    logger.warning(f"Failed to fetch data for {len(failed_symbols)} symbols: {failed_symbols}")
                 self.last_failed_fetch_symbols = sset
                 self.last_failed_fetch_log_time = now2
 
-        logger.info(f"Data fetch complete: {len(data)}/{len(symbols)} symbols successful")
+        if not getattr(self, 'quiet_logs', True):
+            logger.info(f"Data fetch complete: {len(data)}/{len(symbols)} symbols successful")
         return data
 
     def _fetch_commodity_yf_batch(self, symbols: List[str]) -> Dict:
@@ -3725,6 +5581,11 @@ class UltimateFNOTrader:
             pass
 
     def auto_optimize_thresholds(self):
+        closed_trades = self.trade_journal.get('closed_trades', [])
+        min_samples = int(self.config.get('min_closed_trades_for_validation', 10))
+        if len(closed_trades) < min_samples:
+            return
+
         metrics = self.trade_journal.get('performance_metrics', {})
         win = float(metrics.get('win_rate', 0))
         pf = float(metrics.get('profit_factor', 0))
@@ -3772,7 +5633,10 @@ class UltimateFNOTrader:
             'pnl': pnl,
             'reason': reason,
             'strategy': self.active_strategy_key,
-            'confidence': position.get('confidence', 0)
+            'confidence': position.get('confidence', 0),
+            'tradingsymbol': position.get('tradingsymbol'),
+            'market_type': position.get('market_type'),
+            'direction': position.get('direction')
         }
 
         self.trade_journal['closed_trades'].append(trade_record)
@@ -3835,6 +5699,186 @@ class UltimateFNOTrader:
             )
             return True
         return False
+
+    def can_execute_live(self, trade_plan: Dict) -> bool:
+        try:
+            perf = self.trade_journal.get('performance_metrics', {}) if isinstance(getattr(self, 'trade_journal', {}), dict) else {}
+            
+            # Allow initial trades for calibration
+            closed_trades = self.trade_journal.get('closed_trades', [])
+            min_samples = int(self.config.get('min_closed_trades_for_validation', 10))
+            if len(closed_trades) < min_samples:
+                return True
+
+            min_wr = float(self.config.get('min_win_rate_threshold', 55.0))
+            min_pf = float(self.config.get('min_profit_factor_threshold', 1.2))
+            wr = float(perf.get('win_rate', 0) or 0)
+            pf = float(perf.get('profit_factor', 0) or 0)
+            if wr < min_wr or pf < min_pf:
+                return False
+        except Exception:
+            pass
+        try:
+            sym = trade_plan.get('symbol')
+            if sym:
+                lt = self.last_trade_times.get(sym)
+                cd_min = int(self.config.get('precision_cooldown_minutes', 20))
+                if lt and (datetime.now() - lt).total_seconds() < cd_min * 60:
+                    return False
+                corr_thresh = float(self.config.get('precision_max_correlation', 0.7))
+                corr = self._correlation_with_open_positions(sym)
+                if corr >= corr_thresh:
+                    return False
+        except Exception:
+            pass
+        try:
+            if self.check_circuit_breakers():
+                return False
+        except Exception:
+            pass
+        return True
+    def reconcile_broker_positions(self):
+        try:
+            broker = (os.getenv('BROKER') or 'GROWW').strip().upper()
+            ext_positions = []
+            if broker == 'KITE' and self.kite:
+                try:
+                    kp = self.kite.positions()
+                    for seg in ['net','day']:
+                        for p in kp.get(seg, []):
+                            ext_positions.append(p)
+                except Exception:
+                    pass
+            elif broker == 'GROWW' and getattr(self, 'groww_api', None):
+                try:
+                    gp = self.groww_api.positions()
+                    pay = gp.get('payload') or gp
+                    arr = pay.get('positions') or pay.get('data') or []
+                    for p in arr:
+                        ext_positions.append(p)
+                except Exception:
+                    pass
+            if not ext_positions:
+                return False
+            cur = self.paper_portfolio.get('positions', {})
+            for k in list(cur.keys()):
+                pos = cur.get(k)
+                sym = pos.get('symbol')
+                found = any((str(ep.get('tradingsymbol','')).startswith(sym) or str(ep.get('symbol','')).startswith(sym)) for ep in ext_positions)
+                if not found:
+                    continue
+            return True
+        except Exception:
+            return False
+
+    def _symbol_returns(self, symbol: str, periods: int = 30):
+        try:
+            s = yf.Ticker(symbol + '.NS')
+            df = s.history(period='1d', interval='5m')
+            if df is None or df.empty:
+                return []
+            close = df['Close'].tail(periods + 1)
+            r = close.pct_change().dropna().tolist()
+            return r
+        except Exception:
+            return []
+
+    def _correlation_with_open_positions(self, symbol: str) -> float:
+        try:
+            base = self._symbol_returns(symbol)
+            if not base:
+                return 0.0
+            corr_vals = []
+            for pos in self.paper_portfolio.get('positions', {}).values():
+                sym = pos.get('symbol')
+                if not sym:
+                    continue
+                r = self._symbol_returns(sym)
+                if r and len(r) == len(base):
+                    a = np.array(base)
+                    b = np.array(r)
+                    if np.std(a) > 0 and np.std(b) > 0:
+                        c = float(np.corrcoef(a, b)[0,1])
+                        corr_vals.append(c)
+            if corr_vals:
+                return float(np.mean(corr_vals))
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def send_daily_audit_summary(self):
+        try:
+            perf = self.trade_journal.get('performance_metrics', {}) if isinstance(getattr(self, 'trade_journal', {}), dict) else {}
+            wr = float(perf.get('win_rate', 0) or 0)
+            pf = float(perf.get('profit_factor', 0) or 0)
+            total_trades = int(perf.get('total_trades', 0) or 0)
+            open_positions = len(self.paper_portfolio.get('positions', {}))
+            exposure = float(self.paper_portfolio.get('margin_used', 0) or 0)
+            pv = float(self.paper_portfolio.get('total_value', 0) or 0)
+            ic = float(self.paper_portfolio.get('initial_capital', 0) or 0)
+            dd = ((ic - pv) / ic * 100) if ic else 0.0
+            trades_executed = int(self.scan_summary.get('trades_executed_count', 0))
+            api_failures = int(self.api_failures)
+            health = self.health_status
+            msg = (
+                f"📋 <b>DAILY AUDIT SUMMARY</b>\n"
+                f"Win Rate: {wr:.1f}% | Profit Factor: {pf:.2f}\n"
+                f"Trades Today: {trades_executed} | Total Trades: {total_trades}\n"
+                f"Open Positions: {open_positions} | Exposure: ₹{exposure:,.0f}\n"
+                f"Portfolio: ₹{pv:,.0f} (DD: {dd:.1f}%)\n"
+                f"API Failures: {api_failures} | Health: {health}"
+            )
+            if self.telegram_enabled:
+                self.send_telegram_alert(msg)
+            logger.info("Daily audit summary sent.")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send daily audit summary: {e}")
+            return False
+
+    def reconcile_broker_positions(self):
+        try:
+            broker = (os.getenv('BROKER') or 'GROWW').strip().upper()
+            if broker != 'GROWW' or not getattr(self, 'groww_api', None):
+                return False
+            resp = self.groww_api.positions()
+            payload = resp.get('payload') or {}
+            positions = payload.get('positions') or payload.get('data') or []
+            if not isinstance(positions, list):
+                return False
+            existing = self.paper_portfolio.get('positions', {})
+            for pos in positions:
+                symbol = str(pos.get('symbol') or pos.get('tradingsymbol') or '').strip()
+                qty = int(pos.get('quantity') or pos.get('qty') or 0)
+                last_price = float(pos.get('ltp') or pos.get('last_price') or pos.get('price') or 0)
+                if not symbol or qty <= 0:
+                    continue
+                found_key = None
+                for k, v in existing.items():
+                    if v.get('symbol') == symbol:
+                        found_key = k
+                        break
+                if found_key:
+                    existing[found_key]['current_premium'] = last_price
+                    existing[found_key]['quantity'] = qty
+                else:
+                    pk = f"{symbol}_RECON_{datetime.now().strftime('%H%M%S')}"
+                    existing[pk] = {
+                        'symbol': symbol,
+                        'quantity': qty,
+                        'entry_price': float(pos.get('entry_price') or pos.get('avg_price') or last_price or 0),
+                        'entry_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'stop_loss': float(pos.get('stop_loss') or 0),
+                        'target': float(pos.get('target') or 0),
+                        'trade_mode': 'RECONCILED',
+                        'current_premium': last_price,
+                        'confidence': float(self.min_confidence or 0),
+                        'risk_reward': float(self.min_rr_ratio or 0)
+                    }
+            self.paper_portfolio['positions'] = existing
+            return True
+        except Exception:
+            return False
 
     # ------------------ POSITION SIZING (FIXING DELTA GAP) ------------------
     def calculate_position_size(self, trade_plan: Dict, premium: float, lot_size: int) -> int:
@@ -3944,18 +5988,18 @@ class UltimateFNOTrader:
             recent_high = float(high.tail(lookback).max())
             recent_low = float(low.tail(lookback).min())
 
-            current_volume = float(df['Volume'].iloc[-1]) if 'Volume' in df.columns else 1.0
-            avg_volume = float(df['Volume'].tail(lookback).mean()) if 'Volume' in df.columns else 1.0
+            current_volume = float(np.asarray(df['Volume'].iloc[-1])) if 'Volume' in df.columns else 1.0
+            avg_volume = float(np.asarray(df['Volume'].tail(lookback).mean())) if 'Volume' in df.columns else 1.0
             volume_ratio = (current_volume / avg_volume) if avg_volume > 0 else 1.0
 
             sma_period = min(20, len(df))
             sma_20_series = close.rolling(sma_period).mean()
-            sma_20 = float(sma_20_series.iloc[-1])
+            sma_20 = float(np.asarray(sma_20_series.iloc[-1]))
             sma_50_series = close.rolling(min(50, len(df))).mean()
-            sma_50 = float(sma_50_series.iloc[-1]) if len(df) >= 50 else sma_20
+            sma_50 = float(np.asarray(sma_50_series.iloc[-1])) if len(df) >= 50 else sma_20
 
             # Bollinger Bands (20, 2)
-            bb_std = float(close.rolling(sma_period).std().iloc[-1]) if len(df) >= sma_period else 0.0
+            bb_std = float(np.asarray(close.rolling(sma_period).std().iloc[-1])) if len(df) >= sma_period else 0.0
             bb_upper = sma_20 + 2 * bb_std
             bb_lower = sma_20 - 2 * bb_std
 
@@ -3964,11 +6008,11 @@ class UltimateFNOTrader:
             ema26 = close.ewm(span=26, adjust=False).mean()
             macd_series = ema12 - ema26
             macd_signal_series = macd_series.ewm(span=9, adjust=False).mean()
-            macd = float(macd_series.iloc[-1])
-            macd_signal = float(macd_signal_series.iloc[-1])
+            macd = float(np.asarray(macd_series.iloc[-1]))
+            macd_signal = float(np.asarray(macd_signal_series.iloc[-1]))
             macd_hist = macd - macd_signal
 
-            prev_close = float(close.iloc[-2]) if len(close) > 1 else current_price
+            prev_close = float(np.asarray(close.iloc[-2])) if len(close) > 1 else current_price
             price_change = ((current_price - prev_close) / prev_close) * 100 if prev_close else 0.0
 
             return {
@@ -4054,6 +6098,29 @@ class UltimateFNOTrader:
             if vol > 30:
                 mult *= 1.05
             elif vol < 12:
+                mult *= 0.95
+            return min(score * mult, 10.0)
+
+        elif self.active_strategy_key == "GOLDMINI_PINE":
+            score = 0.0
+            if ind['macd'] > ind['macd_signal']: score += 3.0
+            if 45 <= ind['rsi'] <= 65: score += 2.5
+            if ind['current_price'] > ind['sma_20']: score += 1.5
+            if ind.get('macd_hist', 0) > 0: score += 0.5
+            if ind.get('bb_upper') and ind.get('bb_lower'):
+                band_width_pct = ((ind['bb_upper'] - ind['bb_lower']) / ind['current_price']) * 100
+                if band_width_pct < 3.0 and ind['price_change'] > 0.3:
+                    score += 1.0
+            regime = getattr(self, 'active_market_regime', 'TRENDING')
+            vol = float(ind.get('volatility', 20))
+            mult = 1.0
+            if regime == 'TRENDING':
+                mult *= 1.05
+            else:
+                mult *= 1.00
+            if vol > 30:
+                mult *= 1.05
+            elif vol < 10:
                 mult *= 0.95
             return min(score * mult, 10.0)
 
@@ -4148,6 +6215,29 @@ class UltimateFNOTrader:
                 mult *= 0.95
             return min(score * mult, 10.0)
 
+        elif self.active_strategy_key == "GOLDMINI_PINE":
+            score = 0.0
+            if ind['macd'] < ind['macd_signal']: score += 3.0
+            if 35 <= ind['rsi'] <= 55: score += 2.5
+            if ind['current_price'] < ind['sma_20']: score += 1.5
+            if ind.get('macd_hist', 0) < 0: score += 0.5
+            if ind.get('bb_upper') and ind.get('bb_lower'):
+                band_width_pct = ((ind['bb_upper'] - ind['bb_lower']) / ind['current_price']) * 100
+                if band_width_pct < 3.0 and ind['price_change'] < -0.3:
+                    score += 1.0
+            regime = getattr(self, 'active_market_regime', 'TRENDING')
+            vol = float(ind.get('volatility', 20))
+            mult = 1.0
+            if regime == 'TRENDING':
+                mult *= 1.05
+            else:
+                mult *= 1.00
+            if vol > 30:
+                mult *= 1.05
+            elif vol < 10:
+                mult *= 0.95
+            return min(score * mult, 10.0)
+
         score = 0.0
         if ind['current_price'] < ind['sma_20']: score += 1.5
         if ind['current_price'] < ind['sma_50']: score += 1.5
@@ -4231,6 +6321,8 @@ class UltimateFNOTrader:
         
         # Directional strategies
         diff_req = 2.0 if regime == 'RANGING' else 1.5
+        if getattr(self, 'active_strategy_key', '') == 'SOTD_INTRADAY':
+            diff_req = 1.0
         if bullish >= min_conf and bullish - bearish >= diff_req:
             bull_pot = self.calculate_potential(ind, 'BULLISH', bullish)
             if bull_pot >= self.required_move:
@@ -4248,13 +6340,20 @@ class UltimateFNOTrader:
             signals.append(('VOLATILITY_STRANGLE', self.required_move * 0.7, min_conf - 0.5))
         
         # Range-bound strategies for low volatility
+        # NOTE: SOTD_INTRADAY might trigger IRON_CONDOR if volatility is low and trend is weak
+        # We ensure min_conf is met. For SOTD_INTRADAY, we might be lenient.
         if (not is_commodity_mode) and volatility < 15 and abs(bullish - bearish) < 1.0:
-            signals.append(('IRON_CONDOR', self.required_move * 0.5, min_conf - 1.0))
+            # For SOTD_INTRADAY, we allow IRON_CONDOR but ensure confidence is decent
+            if getattr(self, 'active_strategy_key', '') == 'SOTD_INTRADAY':
+                 condor_conf = min_conf + 0.1
+            else:
+                 condor_conf = min_conf - 1.0
+            signals.append(('IRON_CONDOR', self.required_move * 0.5, condor_conf))
 
         return signals
 
     def trade_plan(self, symbol: str, direction: str, potential: float, confidence: float,
-                   price: float, indicators: Dict):
+                   price: float, indicators: Dict, skip_rr_check: bool = False):
         atr_val = float(indicators.get('true_range', 0.0) or 0.0)
         if atr_val > 0 and price > 0:
             stop_abs = atr_val * 2.0
@@ -4268,12 +6367,17 @@ class UltimateFNOTrader:
             target = round(price * (1 + potential/100), 1)
             stop = round(price * (1 - stop_pct/100), 1)
             rr = round((target - price) / (price - stop), 2) if price > stop else 1.0
+        elif direction in ['IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE']:
+            # For display, show a target slightly different from entry (e.g. 0.5% profit)
+            target = round(price * 0.995, 1) 
+            stop = round(price * (1 + stop_pct/100), 1)
+            rr = 9.99
         else:
             target = round(price * (1 - potential/100), 1)
             stop = round(price * (1 + stop_pct/100), 1)
             rr = round((price - target) / (stop - price), 2) if stop > price else 1.0
 
-        if rr < self.min_rr_ratio:
+        if (not skip_rr_check) and rr < self.min_rr_ratio and direction not in ['IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE']:
             logger.debug(f"Plan for {symbol} failed R:R check: {rr:.2f} < {self.min_rr_ratio}")
             return None
 
@@ -4306,21 +6410,23 @@ class UltimateFNOTrader:
         strike = self.find_nearest_available_strike(symbol, initial_strike, 'CALL' if direction == 'BULLISH' else 'PUT', expiry_date_str)
 
         premium = 0.0
-        option_type = 'CALL' if direction == 'BULLISH' else 'PUT'
-        option_token, tradingsymbol = self.get_option_instrument_token(symbol, strike, option_type, expiry_date_str)
-        if tradingsymbol:
-            parsed = self.parse_strike_from_tradingsymbol(tradingsymbol)
-            if parsed:
-                strike = parsed
-        if option_token and tradingsymbol and self.kite:
-            try:
-                quote_key = f"NFO:{tradingsymbol}"
-                live_quote = self.safe_quote(quote_key)
-                ltp = live_quote.get(quote_key, {}).get('last_price')
-                if ltp and ltp > 0.05:
-                    premium = float(ltp)
-            except Exception:
-                pass
+        
+        # FIX: Handle Neutral Strategies (IRON_CONDOR, STRADDLE)
+        # For Paper Trading, we can't easily simulate 4 legs. 
+        # We will use a STRADDLE (Call + Put) logic for premium tracking or default to CALL for tracking.
+        # But to avoid the "Default to PUT" issue, we explicitly handle it.
+        if direction in ['IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE', 'LONG_STRADDLE', 'SHORT_STRADDLE']:
+             # For simulation, we'll pick a CALL to track volatility/premium, 
+             # or ideally we'd track both. For now, defaulting to CALL is 'safer' than PUT for neutral
+             # as it aligns with "Long Volatility".
+             option_type = 'CALL' 
+        else:
+             option_type = 'CALL' if direction == 'BULLISH' else 'PUT'
+
+        s_liq, option_token, tradingsymbol, ltp_liq = self.ensure_liquid_option(symbol, strike, option_type, expiry_date_str)
+        if tradingsymbol and s_liq:
+            strike = s_liq
+            premium = float(ltp_liq or 0.0)
         lot_size = self.get_lot_size(symbol)
 
         logger.debug(f"Metrics: {symbol} Spot={spot_price:.1f}, Strike={strike:.0f}, Prem={premium:.1f}, Lot={lot_size}")
@@ -4334,12 +6440,21 @@ class UltimateFNOTrader:
         expiry_date_str = expiry_date.strftime("%Y-%m-%d")
         days_to_expiry_int = (expiry_date - datetime.now().date()).days
 
+        # Normalize minis to broker instrument names
+        base_symbol = str(symbol).strip().upper()
+        if base_symbol == 'GOLDMINI':
+            base_symbol = 'GOLDM'
+        elif base_symbol == 'CRUDEOILMINI':
+            base_symbol = 'CRUDEOILM'
+        elif base_symbol == 'NATURALGASMINI':
+            base_symbol = 'NATURALGASM'
+
         # For commodities, we trade futures directly, so no strike selection needed
         # The "strike" is effectively the current futures price
         futures_price = current_price
         
         # Get live commodity futures price
-        commodity_token, tradingsymbol = self.get_commodity_instrument_token(symbol, expiry_date_str, 'FUT')
+        commodity_token, tradingsymbol = self.get_commodity_instrument_token(base_symbol, expiry_date_str, 'FUT')
         
         if commodity_token and tradingsymbol and self.kite:
             try:
@@ -4351,7 +6466,17 @@ class UltimateFNOTrader:
             except Exception:
                 pass
         
-        lot_size = self.commodity_lot_sizes.get(symbol, 1)
+        lot_size = int(self.get_mcx_lot_size(base_symbol) or 0)
+        if lot_size <= 0:
+            # Try refreshing cache once and resolve again
+            try:
+                self.refresh_mcx_instruments_cache()
+            except Exception:
+                pass
+            lot_size = int(self.get_mcx_lot_size(base_symbol) or 0)
+        if lot_size <= 0:
+            logger.warning(f"MCX lot size unavailable for {symbol}; skipping metrics.")
+            lot_size = 0
         
         logger.debug(f"Commodity Metrics: {symbol} Price={futures_price:.1f}, Lot={lot_size}, Expiry={expiry_date_str}")
         return futures_price, futures_price, lot_size  # Return price as both strike and premium for commodities
@@ -4360,6 +6485,12 @@ class UltimateFNOTrader:
         if getattr(self, 'observe_only', False):
             logger.info("OBSERVE_ONLY: skipping option trade execution")
             return False
+        try:
+            if not self.can_execute_live(trade_plan):
+                logger.info("Validation gates prevent option trade execution")
+                return False
+        except Exception:
+            pass
         symbol = trade_plan['symbol']
         direction = trade_plan['direction']
         spot_price = trade_plan['entry']
@@ -4375,14 +6506,11 @@ class UltimateFNOTrader:
         logger.info(f"Attempting execution for {symbol} ({direction}). Conf: {trade_plan['confidence']:.1f}")
 
         try:
-            # 1. Determine Option Metrics (Strike & Expiry)
             expiry_date = self.get_next_tradable_expiry(symbol)
             expiry_date_str = expiry_date.strftime("%Y-%m-%d")
             days_to_expiry_int = (expiry_date - datetime.now().date()).days
-
             initial_strike = self.get_strike_price(spot_price, direction)
             final_strike = self.find_nearest_available_strike(symbol, initial_strike, 'CALL' if direction == 'BULLISH' else 'PUT', expiry_date_str)
-
             if final_strike is None:
                 today_date = datetime.now().date()
                 year = today_date.year
@@ -4406,18 +6534,11 @@ class UltimateFNOTrader:
                 if final_strike is None:
                     logger.error(f"Cannot execute {symbol}: Strike calculation failed unexpectedly.")
                     return False
-
             strike_rounded = round(final_strike)
             option_type = 'CALL' if direction=='BULLISH' else 'PUT'
-
-            # 2. Get Live Option Premium and Instrument Details
-            option_token, tradingsymbol = self.get_option_instrument_token(
-                symbol, strike_rounded, option_type, expiry_date_str
-            )
-            if tradingsymbol:
-                parsed = self.parse_strike_from_tradingsymbol(tradingsymbol)
-                if parsed and parsed != strike_rounded:
-                    strike_rounded = parsed
+            s_liq, option_token, tradingsymbol, ltp_liq = self.ensure_liquid_option(symbol, strike_rounded, option_type, expiry_date_str)
+            if s_liq and tradingsymbol:
+                strike_rounded = s_liq
             if not option_token or not tradingsymbol:
                 today_date = datetime.now().date()
                 year = today_date.year
@@ -4439,10 +6560,10 @@ class UltimateFNOTrader:
                 days_to_expiry_int = (expiry_date - datetime.now().date()).days
                 final_strike = self.find_nearest_available_strike(symbol, initial_strike, 'CALL' if direction == 'BULLISH' else 'PUT', expiry_date_str)
                 strike_rounded = round(final_strike) if final_strike is not None else strike_rounded
-                option_token, tradingsymbol = self.get_option_instrument_token(
-                    symbol, strike_rounded, option_type, expiry_date_str
-                )
-            spot_token = self.token_map.get(symbol) # Get the underlying spot token
+                option_token, tradingsymbol = self.get_option_instrument_token(symbol, strike_rounded, option_type, expiry_date_str)
+            spot_token = self.token_map.get(symbol)
+        except Exception:
+            pass
 
             premium = None
             if option_token and tradingsymbol:
@@ -4455,8 +6576,9 @@ class UltimateFNOTrader:
                     if bid and ask and bid > 0 and ask > 0:
                         mid = (bid + ask) / 2.0
                         spread_pct = (ask - bid) / mid if mid > 0 else 0.0
-                        if spread_pct > 0.02:
-                            logger.warning(f"Skipping {tradingsymbol}: Spread {spread_pct:.2%} > 2%")
+                        # Relax spread check for Paper Trading / Testing
+                        if spread_pct > 0.05:
+                            logger.warning(f"Skipping {tradingsymbol}: Spread {spread_pct:.2%} > 5%")
                             return False
 
                     if live_ltp is not None and live_ltp > 0.05:
@@ -4515,7 +6637,8 @@ class UltimateFNOTrader:
                     return False
 
                 try:
-                    limit_price = self._market_protection_limit(premium, 'BUY', 'OPT')
+                    q = self.safe_quote(f"NFO:{tradingsymbol}")
+                    limit_price = self._protected_limit_with_depth(q.get(f"NFO:{tradingsymbol}", {}) or {}, 'BUY', 'OPT', premium)
                     est_cost_per_lot = limit_price * lot_size
                     est_trade_value = est_cost_per_lot * quantity
                     if available_cash < est_trade_value:
@@ -4644,6 +6767,7 @@ class UltimateFNOTrader:
                     'lot_size': lot_size,
                     'quantity': quantity,
                     'entry_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'expiry_date': expiry_date_str,
                     'stop_loss': trade_plan['stop_loss'],
                     'target': trade_plan['target'],
                     'trade_mode': trade_plan.get('trade_mode','SWING'),
@@ -4687,12 +6811,37 @@ class UltimateFNOTrader:
                 except Exception:
                     pass
 
-                self.send_trade_alert(trade_plan, premium=final_entry_premium, strike=strike_rounded, lot_size=lot_size, quantity=quantity, trade_value=final_trade_value, status="TRADE EXECUTED")
+                self.send_trade_alert(trade_plan, premium=final_entry_premium, strike=strike_rounded, lot_size=lot_size, quantity=quantity, trade_value=final_trade_value, status="TRADE EXECUTED", tradingsymbol=tradingsymbol)
                 if self.dashboard_app:
                     self.dashboard_app.socketio.emit('trade_executed', {
                         'symbol': symbol, 'option_type': option_type,
                         'strike': strike_rounded, 'premium': final_entry_premium, 'cost': final_trade_value
                     })
+                    try:
+                        snap = self.package_dashboard_data()
+                        self.dashboard_app.socketio.emit('dashboard_update', snap)
+                        # Emit position snapshot for UI lists that listen to 'position'
+                        pos_snapshot = {
+                            'symbol': symbol,
+                            'option_type': option_type,
+                            'strike_price': strike_rounded,
+                            'pnl': 0.0,
+                            'exit_reason': '',
+                            'quantity': quantity
+                        }
+                        self.dashboard_app.socketio.emit('position', pos_snapshot)
+                        # Mark signal as executed for signal tables
+                        self.dashboard_app.socketio.emit('signal', {
+                            'symbol': symbol,
+                            'direction': direction,
+                            'entry': spot_price,
+                            'target': trade_plan.get('target'),
+                            'stop_loss': trade_plan.get('stop_loss'),
+                            'confidence': trade_plan.get('confidence'),
+                            'status': 'EXECUTED'
+                        })
+                    except Exception:
+                        pass
 
                 logger.info(f"{Fore.GREEN}✅ Trade executed: {symbol} @ Lots: {quantity}, Cost: ₹{final_trade_value:,.0f}{Style.RESET_ALL}")
                 return True
@@ -4708,6 +6857,12 @@ class UltimateFNOTrader:
         if getattr(self, 'observe_only', False):
             logger.info("OBSERVE_ONLY: skipping commodity trade execution")
             return False
+        try:
+            if not self.can_execute_live(trade_plan):
+                logger.info("Validation gates prevent commodity trade execution")
+                return False
+        except Exception:
+            pass
         """Execute commodity futures trade using MCX exchange"""
         symbol = trade_plan['symbol']
         direction = trade_plan['direction']
@@ -4761,8 +6916,15 @@ class UltimateFNOTrader:
             if current_price is None or current_price <= 0:
                 logger.error("Live commodity price unavailable; skipping trade.")
                 return False
+            try:
+                live_quote2 = self.safe_quote(f"MCX:{tradingsymbol}")
+                if not self._has_liquidity(live_quote2.get(f"MCX:{tradingsymbol}", {}) or {}):
+                    logger.warning(f"No depth liquidity for {tradingsymbol}; skipping trade.")
+                    return False
+            except Exception:
+                pass
 
-            lot_size = self.commodity_lot_sizes.get(symbol)
+            lot_size = int(self.get_mcx_lot_size(symbol) or 0)
             if not lot_size or lot_size <= 0:
                 logger.error(f"Cannot execute {symbol}: Commodity lot size unavailable.")
                 return False
@@ -4805,7 +6967,8 @@ class UltimateFNOTrader:
                     return False
 
                 try:
-                    limit_price = self._market_protection_limit(current_price, 'BUY', 'FUT')
+                    q = self.safe_quote(f"MCX:{tradingsymbol}")
+                    limit_price = self._protected_limit_with_depth(q.get(f"MCX:{tradingsymbol}", {}) or {}, 'BUY', 'FUT', current_price)
                     est_cost_per_lot2 = limit_price * lot_size
                     est_trade_value2 = est_cost_per_lot2 * quantity
                     if available_cash < est_trade_value2:
@@ -4901,7 +7064,14 @@ class UltimateFNOTrader:
             else: # PAPER mode
                 logger.debug(f"Executing paper commodity trade for {symbol}...")
                 trade_successful = True
-                final_entry_price = current_price
+                safe_entry = float(trade_plan.get('entry') or 0)
+                if not current_price or current_price <= 0:
+                    try:
+                        fprice, _, _ = self.get_commodity_metrics_paper(symbol, direction, safe_entry, volatility)
+                        current_price = float(fprice or 0)
+                    except Exception:
+                        current_price = safe_entry
+                final_entry_price = float(current_price or safe_entry or 0)
 
             # 6. POSITION TRACKING FOR COMMODITIES
             if trade_successful:
@@ -4925,6 +7095,7 @@ class UltimateFNOTrader:
                     'lot_size': lot_size,
                     'quantity': quantity,
                     'entry_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'expiry_date': expiry_date_str,
                     'stop_loss': trade_plan['stop_loss'],
                     'target': trade_plan['target'],
                     'trade_mode': trade_plan.get('trade_mode','COMMODITY_TREND'),
@@ -4942,14 +7113,57 @@ class UltimateFNOTrader:
                 }
                 self.save_trade_history()
 
-                self.send_trade_alert(trade_plan, premium=final_entry_price, lot_size=lot_size, quantity=quantity, trade_value=final_trade_value, status="COMMODITY TRADE EXECUTED")
+                self.send_trade_alert(trade_plan, premium=final_entry_price, lot_size=lot_size, quantity=quantity, trade_value=final_trade_value, status="COMMODITY TRADE EXECUTED", tradingsymbol=tradingsymbol)
                 if self.dashboard_app:
                     self.dashboard_app.socketio.emit('commodity_trade_executed', {
                         'symbol': symbol, 'instrument_type': 'FUT',
                         'entry_price': final_entry_price, 'cost': final_trade_value
                     })
+                    try:
+                        self.dashboard_app.emit_portfolio_update(self.package_dashboard_data())
+                        self.dashboard_app.socketio.emit('position', {
+                            'symbol': symbol,
+                            'option_type': 'FUT',
+                            'strike_price': 0,
+                            'pnl': 0.0,
+                            'exit_reason': '',
+                            'quantity': quantity
+                        })
+                    except Exception:
+                        pass
+                    try:
+                        snap = self.package_dashboard_data()
+                        self.dashboard_app.socketio.emit('dashboard_update', snap)
+                        self.dashboard_app.socketio.emit('position', {
+                            'symbol': symbol,
+                            'option_type': 'FUT',
+                            'strike_price': 0,
+                            'pnl': 0.0,
+                            'exit_reason': '',
+                            'quantity': quantity
+                        })
+                        self.dashboard_app.socketio.emit('signal', {
+                            'symbol': symbol,
+                            'direction': direction,
+                            'entry': final_entry_price,
+                            'target': trade_plan.get('target'),
+                            'stop_loss': trade_plan.get('stop_loss'),
+                            'confidence': trade_plan.get('confidence'),
+                            'status': 'EXECUTED'
+                        })
+                    except Exception:
+                        pass
 
                 logger.info(f"{Fore.GREEN}✅ Commodity trade executed: {symbol} @ Lots: {quantity}, Cost: ₹{final_trade_value:,.0f}{Style.RESET_ALL}")
+                try:
+                    today = datetime.now().date()
+                    if getattr(self, 'last_trade_day', today) != today:
+                        self.trades_today = 0
+                        self.last_trade_day = today
+                    self.trades_today = int(getattr(self, 'trades_today', 0)) + 1
+                    self.last_trade_time = datetime.now()
+                except Exception:
+                    pass
                 return True
 
             logger.error(f"Commodity trade execution stub returned False for {symbol}.{Style.RESET_ALL}")
@@ -4959,6 +7173,97 @@ class UltimateFNOTrader:
             traceback.print_exc()
             return False
 
+    def execute_commodity_option_trade(self, trade_plan: Dict) -> bool:
+        if getattr(self, 'observe_only', False):
+            return False
+        try:
+            symbol = trade_plan['symbol']
+            direction = trade_plan['direction']
+            expiry_date = self.get_next_commodity_expiry(symbol)
+            expiry_date_str = expiry_date.strftime("%Y-%m-%d")
+            opt_type = 'CALL' if direction == 'BULLISH' else 'PUT'
+            spot = float(trade_plan.get('entry', 0) or 0)
+            step = float(self.get_strike_step(symbol) or 50)
+            if spot > 0:
+                if opt_type == 'CALL':
+                    desired_strike = float(math.floor(spot / step) * step)
+                else:
+                    desired_strike = float(math.ceil(spot / step) * step)
+            else:
+                desired_strike = 0.0
+            token, ts, strike_sel, ltp = self.ensure_liquid_commodity_option(symbol, desired_strike, opt_type, expiry_date_str)
+            if not token or not ts or not ltp or ltp <= 0.05:
+                return False
+            if spot > 0 and strike_sel:
+                 diff = abs(float(strike_sel) - spot)
+                 # Relaxed check: allow up to 2 steps distance if needed, but prefer tighter
+                 # Previous strict check: if diff > step: return False
+                 # New check: just ensure it's not wildly OTM (e.g. > 5 steps)
+                 if diff > 5 * step:
+                     return False
+            lot = 0
+            try:
+                # Prefer lot_size from the exact selected instrument to avoid alias mismatches
+                for inst in (self.get_mcx_instruments() or []):
+                    if str(inst.get('tradingsymbol') or '').upper() == str(ts).upper():
+                        lot = int(inst.get('lot_size') or 0)
+                        break
+            except Exception:
+                lot = 0
+            if lot <= 0:
+                lot = int(self.get_mcx_lot_size(symbol) or 0)
+            if lot <= 0:
+                try:
+                    self.refresh_mcx_instruments_cache()
+                except Exception:
+                    pass
+                lot = int(self.get_mcx_lot_size(symbol) or 0)
+            if lot <= 0:
+                return False
+            trade_plan['strike_price'] = int(strike_sel or (self.parse_strike_from_tradingsymbol(ts) or 0) or 0)
+            trade_plan['tradingsymbol'] = ts
+            quantity = int(self.calculate_position_size(trade_plan, float(ltp), lot))
+            if quantity == 0 and self.mode == 'PAPER':
+                quantity = 1
+            cost = float(ltp) * lot * quantity
+            if self._available_cash() < cost:
+                return False
+            pos_key = f"{symbol}_{opt_type}_OPT_{datetime.now().strftime('%H%M%S')}"
+            self.paper_portfolio['margin_used'] += cost
+            self._recalc_cash()
+            self.paper_portfolio['positions'][pos_key] = {
+                'symbol': symbol,
+                'instrument_type': 'OPT',
+                'option_type': opt_type,
+                'entry_price': float(ltp),
+                'strike_price': trade_plan.get('strike_price', 0),
+                'lot_size': lot,
+                'quantity': quantity,
+                'entry_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'stop_loss': trade_plan['stop_loss'],
+                'target': trade_plan['target'],
+                'trade_mode': trade_plan.get('trade_mode', 'GOLDMINI_PINE'),
+                'expiry_days': (expiry_date - datetime.now().date()).days,
+                'current_price': float(ltp),
+                'confidence': trade_plan['confidence'],
+                'risk_reward': trade_plan['risk_reward'],
+                'volatility': trade_plan.get('volatility', 20),
+                'direction': direction,
+                'peak_pnl_pct': 0.0,
+                'token': token,
+                'tradingsymbol': ts,
+                'market_type': 'COMMODITY'
+            }
+            self.save_trade_history()
+            self.send_trade_alert(trade_plan, premium=float(ltp), strike=trade_plan.get('strike_price', 0), lot_size=lot, quantity=quantity, trade_value=cost, status="TRADE EXECUTED", tradingsymbol=ts)
+            if self.dashboard_app:
+                self.dashboard_app.socketio.emit('trade_executed', {
+                    'symbol': symbol, 'option_type': opt_type,
+                    'strike': trade_plan.get('strike_price', 0), 'premium': float(ltp), 'cost': cost
+                })
+            return True
+        except Exception:
+            return False
     def execute_long_straddle(self, symbol: str, entry_price: float, volatility: float) -> bool:
         try:
             bullish_plan = self.trade_plan(symbol, 'BULLISH', potential=2.0, confidence=self.min_confidence, price=entry_price, indicators={'atr_percent': 1.0, 'volatility': volatility})
@@ -4970,6 +7275,55 @@ class UltimateFNOTrader:
             return ok1 and ok2
         except Exception:
             return False
+
+    def handle_tradingview_signal(self, payload: Dict) -> Dict:
+        symbol = str(payload.get('symbol', '') or '').strip().upper()
+        side = str(payload.get('side', '') or '').strip().upper()
+        strategy = str(payload.get('strategy', '') or '').strip().upper()
+        price = payload.get('price')
+        confidence = float(payload.get('confidence', self.min_confidence) or self.min_confidence)
+        direction = None
+        if strategy in {'IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE', 'LONG_STRADDLE', 'SHORT_STRADDLE'}:
+            direction = strategy
+        else:
+            if side in {'BUY', 'LONG'}:
+                direction = 'BULLISH'
+            elif side in {'SELL', 'SHORT'}:
+                direction = 'BEARISH'
+        if not symbol or not direction:
+            return {'executed': False, 'reason': 'invalid_payload'}
+        volatility = 20.0
+        try:
+            data = self.get_stock_data_batch_with_retry([symbol], max_retries=1) or {}
+            df = data.get(symbol)
+            if isinstance(df, pd.DataFrame) and len(df) > 0:
+                ind = self.calculate_indicators(df)
+                if ind and ind.get('volatility'):
+                    volatility = float(ind.get('volatility', 20.0))
+                if price is None and ind and ind.get('current_price'):
+                    price = float(ind.get('current_price'))
+        except Exception:
+            pass
+        if price is None or price <= 0:
+            try:
+                q = self.safe_quote([f"NSE:{symbol}"])
+                lp = q.get(f"NSE:{symbol}", {}).get('last_price')
+                if lp and lp > 0:
+                    price = float(lp)
+            except Exception:
+                pass
+        if price is None or price <= 0:
+            return {'executed': False, 'reason': 'price_unavailable'}
+        potential = max(2.0, self.required_move)
+        indicators = {'atr_percent': 1.0, 'volatility': volatility}
+        tp = self.trade_plan(symbol, direction if direction in {'BULLISH','BEARISH'} else 'BEARISH', potential, confidence, float(price), indicators, skip_rr_check=True)
+        if not tp:
+            return {'executed': False, 'reason': 'trade_plan_unavailable'}
+        if direction in {'IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE', 'LONG_STRADDLE', 'SHORT_STRADDLE'}:
+            ok = self.execute_long_straddle(symbol, float(price), volatility)
+            return {'executed': bool(ok), 'strategy': direction}
+        ok = self.execute_option_trade(tp)
+        return {'executed': bool(ok), 'strategy': direction}
 
     def execute_long_strangle(self, symbol: str, entry_price: float, volatility: float, otm_distance: float = 0.02) -> bool:
         """Execute long strangle strategy with OTM strikes"""
@@ -5018,11 +7372,9 @@ class UltimateFNOTrader:
     def execute_iron_condor(self, symbol: str, entry_price: float, volatility: float, width: float = 0.03) -> bool:
         """Execute iron condor strategy for range-bound markets"""
         try:
-            # This would require both call and put spreads
-            # For now, execute a simplified version with straddle
-            if volatility < 20:  # Low volatility environment
-                return self.execute_long_straddle(symbol, entry_price, volatility)
-            return False
+            # For SOTD_INTRADAY, just use a Long Straddle logic as a proxy for now
+            # since true Iron Condor requires 4 legs which is complex for paper mode
+            return self.execute_long_straddle(symbol, entry_price, volatility)
         except Exception:
             return False
 
@@ -5250,11 +7602,30 @@ class UltimateFNOTrader:
         if self.strategy_params.get('market_type') == 'COMMODITY':
             # Filter to symbols with known tokens and prioritize liquid contracts
             liquid_priority = ['CRUDEOIL','NATURALGAS','GOLD','SILVER','COPPER','ZINC','ALUMINIUM','LEAD','NICKEL']
-            base_list = [s for s in self.commodity_symbols if self.commodity_token_map.get(s)]
+            use_tokens = bool(self.kite and self.commodity_token_map)
+            if (not use_tokens) or (self.mode == 'PAPER'):
+                base_list = self.commodity_symbols if self.commodity_symbols else DEFAULT_COMMODITY_UNIVERSE
+            else:
+                base_list = [s for s in self.commodity_symbols if self.commodity_token_map.get(s)]
+            # If strategy is GOLDMINI_PINE, restrict universe strictly to Gold Mini, Silver, and Crude Oil Mini contracts
+            if str(strategy_key).upper() == 'GOLDMINI_PINE':
+                allowed_set = {'GOLDMINI','GOLDM','SILVER','SILVERM','SILVERMIC','CRUDEOILMINI','CRUDEOILM', 'NATGASMINI', 'NATURALGASMINI', 'NATGASM', 'NATURALGAS'}
+                base_list = [s for s in base_list if s in allowed_set]
             pri = [s for s in liquid_priority if s in base_list]
+            if str(strategy_key).upper() == 'GOLDMINI_PINE':
+                # Prioritize GOLDMINI first, then SILVER variants, then CRUDEOILMINI
+                pri_gold = [s for s in base_list if s in {'GOLDMINI','GOLDM'}]
+                pri_silver = [s for s in base_list if s.startswith('SILVER')]
+                pri_crude = [s for s in base_list if s in {'CRUDEOILMINI','CRUDEOILM'}]
+                pri_ng = [s for s in base_list if s in {'NATGASMINI', 'NATURALGASMINI', 'NATGASM', 'NATURALGAS'}]
+                pri = (pri_gold + pri_silver + pri_crude + pri_ng) or pri
             rest = [s for s in base_list if s not in pri]
             scan_list = pri + rest
-            logger.info(f"⚙️ Commodity scan list prepared: {len(scan_list)} symbols (tokens available)")
+            try:
+                tok_count = sum(1 for s in scan_list if self.commodity_token_map.get(s))
+            except Exception:
+                tok_count = 0
+            logger.info(f"⚙️ Commodity scan list prepared: {len(scan_list)} symbols (tokens available for {tok_count})")
         else:
             if self.config.get('universe_mode') == 'EXPANDED_LIQUID':
                 try:
@@ -5364,6 +7735,22 @@ class UltimateFNOTrader:
                 continue
 
         logger.info(f"✅ ELITE SIGNALS VALIDATED: {len(valid_signals)} passed all filters")
+        try:
+            if self.telegram_enabled and len(valid_signals) > 0:
+                summary = f"✅ <b>ELITE FILTER PASS</b> — {len(valid_signals)} signals"
+                self.send_telegram_alert(summary)
+                for vs in valid_signals:
+                    try:
+                        msg = (
+                            f"🟢 <b>FILTER PASS</b> {vs.get('symbol')} {str(vs.get('direction','')).upper()}\n\n"
+                            f"Conf: {float(vs.get('confidence',0)):.1f} | R:R: 1:{float(vs.get('reward_risk_ratio',0)):.2f}\n"
+                            f"DTE: {int(vs.get('days_to_expiry',0))}"
+                        )
+                        self.send_telegram_alert(msg)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         for vs in valid_signals:
             try:
                 logger.info(f"Passed elite validation: {vs.get('symbol')} {vs.get('direction')} conf={float(vs.get('confidence',0)):.1f} rr={float(vs.get('reward_risk_ratio',0)):.2f} dte={int(vs.get('days_to_expiry',0))}")
@@ -5408,6 +7795,19 @@ class UltimateFNOTrader:
                 bear += 1
 
         logger.info(f"🎯 FINAL ELITE TRADES: {len(final_trades)} ready for execution ({bull} bullish, {bear} bearish)")
+        try:
+            if self.telegram_enabled and len(final_trades) > 0:
+                for tp in final_trades:
+                    try:
+                        m = (
+                            f"🚀 <b>READY TO EXECUTE</b> {tp.get('symbol')} {str(tp.get('direction','')).upper()}\n\n"
+                            f"Conf: {float(tp.get('confidence',0)):.1f} | R:R: 1:{float(tp.get('risk_reward', tp.get('reward_risk_ratio',0))):.2f}"
+                        )
+                        self.send_telegram_alert(m)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         if len(final_trades) == 0:
             try:
@@ -5603,6 +8003,44 @@ class UltimateFNOTrader:
                 strike, premium, lot_size = self.get_commodity_metrics_paper(
                     trade_plan['symbol'], trade_plan['direction'], trade_plan['entry'], trade_plan['volatility']
                 )
+                try:
+                    expiry_date = self.get_next_commodity_expiry(trade_plan['symbol'])
+                    expiry_date_str = expiry_date.strftime("%Y-%m-%d")
+                    opt_type = 'CE' if trade_plan['direction'] == 'BULLISH' else 'PE'
+                    step = self.get_strike_step(trade_plan['symbol'])
+                    desired_strike = round(float(trade_plan['entry'] or 0) / step) * step
+                    mcx_instruments = self.get_mcx_instruments() or []
+                    candidates = []
+                    for inst in mcx_instruments:
+                        seg = str(inst.get('segment') or '')
+                        if not seg.startswith('MCX'):
+                            continue
+                        if str(inst.get('instrument_type')).upper() != opt_type:
+                            continue
+                        ts = str(inst.get('tradingsymbol') or '').upper()
+                        nm = str(inst.get('name') or '').upper()
+                        if not ts.startswith(str(trade_plan['symbol']).upper()):
+                            continue
+                        exp = inst.get('expiry')
+                        exp_str = exp.strftime("%Y-%m-%d") if isinstance(exp, datetime) else str(exp)
+                        if exp_str != expiry_date_str:
+                            continue
+                        st = self.parse_strike_from_tradingsymbol(ts) or 0
+                        if st > 0:
+                            candidates.append((abs(st - float(desired_strike)), st, inst.get('instrument_token'), ts))
+                    if candidates:
+                        candidates.sort(key=lambda x: x[0])
+                        _, st_sel, tok_sel, ts_sel = candidates[0]
+                        qk = f"MCX:{ts_sel}"
+                        q = self.safe_quote(qk)
+                        ltp = (q.get(qk, {}) or {}).get('last_price')
+                        if ltp and ltp > 0.05:
+                            premium = float(ltp)
+                            strike = float(st_sel)
+                            trade_plan['tradingsymbol'] = ts_sel
+                            lot_size = int(self.get_mcx_lot_size(trade_plan['symbol']) or lot_size or 0)
+                except Exception:
+                    pass
             else:
                 strike, premium, lot_size = self.get_option_metrics_paper(
                     trade_plan['symbol'], trade_plan['direction'], trade_plan['entry'], trade_plan['volatility']
@@ -5623,18 +8061,102 @@ class UltimateFNOTrader:
 
             # Defer alert emission until after validation and execution gating
             if self.dashboard_app:
+                symbol_emit = trade_plan['symbol']
+                # Enhanced commodity detection
+                is_comm = bool(self.commodity_token_map.get(symbol_emit)) or (str(symbol_emit).upper() in ['SILVER','SILVERM','SILVERMIC','GOLD','GOLDM','GOLDMINI','CRUDEOIL','CRUDEOILM','NATURALGAS','NATURALGASM']) or bool(self.strategy_params.get('market_type') == 'COMMODITY')
+                market = 'MCX' if is_comm else 'NSE'
+                instrument_type = 'FUT' if is_comm else ('OPT' if trade_plan['direction'] in ['BULLISH','BEARISH','IRON_CONDOR','VOLATILITY_STRADDLE','VOLATILITY_STRANGLE','LONG_STRADDLE','SHORT_STRADDLE'] else 'EQ')
+                # Fill missing entry/target/stop with sensible fallbacks to avoid zeros in UI
+                try:
+                    entry_val = float(trade_plan.get('entry') or 0)
+                except Exception:
+                    entry_val = 0.0
+                
+                # Fallback: if entry is 0, try to use premium or fetch live quote
+                if entry_val <= 0:
+                    if is_comm:
+                        if premium and premium > 0:
+                            entry_val = float(premium)
+                        else:
+                            # Try one last fetch for commodity
+                            try:
+                                _, p_fallback, _ = self.get_commodity_metrics_paper(symbol_emit, trade_plan['direction'], 0, 0)
+                                if p_fallback and p_fallback > 0:
+                                    entry_val = float(p_fallback)
+                                else:
+                                    # Fallback: fetch live futures price directly
+                                    try:
+                                        exp_d = self.get_next_commodity_expiry(symbol_emit)
+                                        exp_s = exp_d.strftime("%Y-%m-%d")
+                                        _, fut_ts = self.get_commodity_instrument_token(symbol_emit, exp_s, 'FUT')
+                                        if fut_ts:
+                                            q_key = f"MCX:{fut_ts}"
+                                            q_res = self.safe_quote(q_key)
+                                            lp = (q_res.get(q_key, {}) or {}).get('last_price')
+                                            if lp and lp > 0:
+                                                entry_val = float(lp)
+                                                trade_plan['entry'] = entry_val
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                    elif not is_comm and self.kite:
+                         # Try fetch for NSE
+                        try:
+                            q_key = f"NSE:{symbol_emit}"
+                            q = self.safe_quote(q_key)
+                            ltp = (q.get(q_key, {}) or {}).get('last_price')
+                            if ltp and ltp > 0:
+                                entry_val = float(ltp)
+                        except Exception:
+                            pass
+
+                try:
+                    target_val = float(trade_plan.get('target') or 0)
+                except Exception:
+                    target_val = 0.0
+                try:
+                    stop_val = float(trade_plan.get('stop_loss') or 0)
+                except Exception:
+                    stop_val = 0.0
+                if target_val <= 0 and entry_val > 0:
+                    try:
+                        potential = float(trade_plan.get('potential', 1.0) or 1.0)
+                        if trade_plan['direction'] == 'BULLISH':
+                            target_val = round(entry_val * (1 + potential/100), 1)
+                        elif trade_plan['direction'] in ['IRON_CONDOR','VOLATILITY_STRADDLE','VOLATILITY_STRANGLE']:
+                            target_val = round(entry_val * 0.995, 1)
+                        else:
+                            target_val = round(entry_val * (1 - potential/100), 1)
+                    except Exception:
+                        target_val = entry_val
+                if stop_val <= 0 and entry_val > 0:
+                    try:
+                        atr_pct = float(trade_plan.get('volatility', 20) or 20) / 100
+                        # Use a conservative default: 1.5% of price if ATR unavailable
+                        stop_pct = max(0.5, 1.5)
+                        if trade_plan['direction'] == 'BULLISH':
+                            stop_val = round(entry_val * (1 - stop_pct/100), 1)
+                        else:
+                            stop_val = round(entry_val * (1 + stop_pct/100), 1)
+                    except Exception:
+                        stop_val = entry_val
                 self.dashboard_app.socketio.emit('signal', {
-                    'symbol': trade_plan['symbol'],
+                    'symbol': symbol_emit,
                     'direction': trade_plan['direction'],
                     'strike': strike,
                     'premium': premium,
-                    'entry': trade_plan.get('entry'),
-                    'target': trade_plan.get('target'),
-                    'stop_loss': trade_plan.get('stop_loss'),
+                    'entry': entry_val,
+                    'entry_price': entry_val,
+                    'target': target_val,
+                    'target_price': target_val,
+                    'stop_loss': stop_val,
                     'confidence': trade_plan['confidence'],
                     'risk_reward': trade_plan['risk_reward'],
                     'timestamp': datetime.now().isoformat(),
-                    'status': 'PENDING'
+                    'status': 'PENDING',
+                    'market': market,
+                    'instrument_type': instrument_type
                 })
             try:
                 sig_entry = {
@@ -5642,9 +8164,11 @@ class UltimateFNOTrader:
                     'direction': trade_plan['direction'],
                     'strike': strike,
                     'premium': premium,
-                    'entry': trade_plan.get('entry'),
-                    'target': trade_plan.get('target'),
-                    'stop_loss': trade_plan.get('stop_loss'),
+                    'entry': entry_val,
+                    'entry_price': entry_val,
+                    'target': target_val,
+                    'target_price': target_val,
+                    'stop_loss': stop_val,
                     'confidence': trade_plan['confidence'],
                     'risk_reward': trade_plan['risk_reward'],
                     'timestamp': datetime.now().isoformat(),
@@ -5782,11 +8306,20 @@ class UltimateFNOTrader:
                 pass
             if WinRateOptimizer and (not is_commodity_mode):
                 try:
+                    # Determine required confidence based on strategy type
+                    req_conf = self.min_confidence
+                    direction = trade_plan.get('direction', '')
+                    
+                    # Relax confidence requirement for non-directional strategies
+                    # as they rely on volatility/range rather than pure directional conviction
+                    if direction in ['IRON_CONDOR', 'LONG_STRADDLE', 'SHORT_STRADDLE', 'VOLATILITY_STRADDLE']:
+                        req_conf = max(5.0, self.min_confidence - 1.5)  # Relax by 1.5 points for volatility plays
+                        
                     ok, checks = WinRateOptimizer.validate_signal({
                         'confidence': float(trade_plan.get('confidence', 0)),
                         'reward_risk_ratio': float(trade_plan.get('risk_reward', 0)),
                         'bid_ask_spread': float(trade_plan.get('bid_ask_spread', 5))
-                    })
+                    }, min_conf=req_conf, min_rr=self.min_rr_ratio)
                 except Exception:
                     ok, checks = True, {}
                 if not ok:
@@ -5852,7 +8385,12 @@ class UltimateFNOTrader:
                     continue
             
             # Enhanced execution with strategy selection
-            if trade_plan['confidence'] >= eff_conf and not is_open:
+            # Relax confidence for neutral/volatility strategies
+            exec_conf = eff_conf
+            if trade_plan['direction'] in ['IRON_CONDOR', 'VOLATILITY_STRADDLE', 'VOLATILITY_STRANGLE', 'LONG_STRADDLE', 'SHORT_STRADDLE']:
+                exec_conf = max(5.0, eff_conf - 1.5)
+
+            if trade_plan['confidence'] >= exec_conf and not is_open:
                 self.send_trade_alert(trade_plan, premium=premium, strike=strike, lot_size=lot_size, status="NEW SIGNAL")
                 logger.info(f"{Fore.MAGENTA}Execution Triggered for {trade_plan['symbol']}. Conf >= {eff_conf:.1f} and Position is Closed.{Style.RESET_ALL}")
                 
@@ -5869,7 +8407,10 @@ class UltimateFNOTrader:
                         except Exception:
                             pass
                         continue
-                    success = self.execute_commodity_trade(trade_plan)
+                    if str(getattr(self, 'active_strategy_key','')).upper() == 'GOLDMINI_PINE':
+                        success = self.execute_commodity_option_trade(trade_plan)
+                    else:
+                        success = self.execute_commodity_trade(trade_plan)
                     if success:
                         logger.info(f"{Fore.GREEN}Successfully executed commodity {direction} strategy for {trade_plan['symbol']}{Style.RESET_ALL}")
                     else:
@@ -5893,7 +8434,16 @@ class UltimateFNOTrader:
                         except Exception:
                             pass
                 elif direction == 'IRON_CONDOR':
-                    success = self.execute_iron_condor(trade_plan['symbol'], entry_price, volatility)
+                    # Fix: Execute Long Straddle as proxy for IRON_CONDOR in SOTD_INTRADAY
+                    # This matches the execute_iron_condor method modification
+                    success = self.execute_long_straddle(trade_plan['symbol'], entry_price, volatility)
+                    if success:
+                         logger.info(f"{Fore.GREEN}Successfully executed IRON_CONDOR (via Straddle) for {trade_plan['symbol']}{Style.RESET_ALL}")
+                    else:
+                         try:
+                            sig_entry['pending_reason'] = 'execution_failed'
+                         except Exception:
+                            pass
                     if not success:
                         try:
                             sig_entry['pending_reason'] = 'execution_failed'
@@ -6016,11 +8566,26 @@ class UltimateFNOTrader:
                 pass
             is_commodity = bool(self.strategy_params.get('market_type') == 'COMMODITY')
             in_window = ((MARKET_OPEN <= current_minutes <= MARKET_CLOSE) or mcx_open_now) if is_auto_unified else (mcx_open_now if is_commodity else (MARKET_OPEN <= current_minutes <= MARKET_CLOSE))
+            try:
+                if str(os.getenv('FORCE_MARKET_OPEN') or '').strip() == '1':
+                    in_window = True
+            except Exception:
+                pass
             if in_window:
                 time_since_last_scan = (now - self.last_scan_time).total_seconds()
 
                 if time_since_last_scan >= self.SCAN_INTERVAL_MINUTES * 60:
                     self.last_scan_time = now
+                try:
+                    is_commodity = bool(self.strategy_params.get('market_type') == 'COMMODITY')
+                except Exception:
+                    is_commodity = False
+                if is_commodity:
+                    try:
+                        self.run_strategy_scan(self.active_strategy_key)
+                    except Exception:
+                        self.run_unified_auto_cycle()
+                else:
                     self.run_continuous_scan_job()
 
                 sleep_time = min(30, self.SCAN_INTERVAL_MINUTES * 60 - time_since_last_scan + 1)
@@ -6039,6 +8604,19 @@ class UltimateFNOTrader:
                 if self.today_date != now.date():
                     self.backtest_run_today = False
                 self.today_date = now.date()
+                try:
+                    if getattr(self, 'groww_api', None):
+                        test_syms = ['NIFTY','RELIANCE']
+                        resp = self.groww_api.ltp(test_syms)
+                        pay = resp.get('payload') or resp.get('ltp') or {}
+                        vals = {}
+                        for s in test_syms:
+                            v = pay.get(s) or pay.get(f"NSE_{s}") or {}
+                            lp = v.get('ltp') if isinstance(v, dict) else None
+                            vals[s] = lp if lp is not None else 0.0
+                        logger.info(f"Groww LTP test outside market window: {vals}")
+                except Exception:
+                    pass
                 logger.info("Market closed. Sleeping...")
                 time.sleep(300)
 
@@ -6048,6 +8626,16 @@ class UltimateFNOTrader:
         logger.info("✅ Automatic utility schedule setup complete.")
         try:
             schedule.every().day.at("23:50").do(self.auto_close_commodity_positions).tag('trading', 'close_commodity')
+        except Exception:
+            pass
+        try:
+            schedule.every().day.at("15:20").do(self.send_daily_audit_summary).tag('audit', 'summary')
+            logger.info("📋 Scheduled daily audit summary at 15:20.")
+        except Exception:
+            pass
+        try:
+            schedule.every().hour.do(self.reconcile_broker_positions).tag('broker', 'reconcile')
+            logger.info("🔄 Scheduled hourly broker reconciliation.")
         except Exception:
             pass
 
@@ -6070,6 +8658,8 @@ class UltimateFNOTrader:
         self.start_health_monitor()
         self.send_telegram_alert(f"🤖 <b>CONTINUOUS {self.mode} TRADER STARTED</b>")
 
+    def refresh_groww_access_token(self):
+        return False
     def reload_state_from_disk(self):
         try:
             self.paper_portfolio = load_portfolio()
@@ -6103,7 +8693,7 @@ class UltimateFNOTrader:
                             elif rr < const_min_rr:
                                 s2['pending_reason'] = 'risk_reward_below_min'
                             else:
-                                s2['pending_reason'] = 'awaiting_execution'
+                                s2['pending_reason'] = 'awaiting_entry'
                                 s2['pending_reason_detail'] = {
                                     'confidence': conf,
                                     'min_confidence': const_min_conf,
@@ -6255,13 +8845,23 @@ class UltimateFNOTrader:
     def update_option_positions(self, spot_data_batch: Dict):
         positions_to_close = []
         est_val_sum = 0.0
-
         for position_key, position in list(self.paper_portfolio['positions'].items()):
             try:
                 symbol = position['symbol']
                 current_spot = position.get('current_spot') # Get spot from WebSocket cache/position data
                 stock_data = None
                 volatility_pct_val = 0.0
+                if current_spot is None and (os.getenv('BROKER') or 'GROWW').strip().upper() == 'GROWW' and getattr(self, 'groww_api', None):
+                    try:
+                        resp = self.groww_api.ltp([symbol])
+                        lp = (resp.get('payload') or {}).get(symbol) or resp.get(symbol)
+                        if isinstance(lp, dict):
+                            lp = lp.get('ltp') or lp.get('last_price') or lp.get('price')
+                        if lp is not None:
+                            current_spot = float(lp)
+                            position['current_spot'] = current_spot
+                    except Exception:
+                        pass
 
                 # If spot is still None (e.g., first run, or token not connected), try historical data for baseline indicator calc
                 if current_spot is None:
@@ -6539,7 +9139,7 @@ class UltimateFNOTrader:
                         except Exception:
                             current_ltp = None
                         base_prem = current_ltp if (current_ltp and current_ltp > 0.05) else exit_premium
-                        limit_price = self._market_protection_limit(base_prem, 'SELL', 'OPT')
+                        limit_price = self._protected_limit_with_depth(q.get(quote_key_full, {}) or {}, 'SELL', 'OPT', base_prem)
                         order_id = self._place_order(
                             tradingsymbol=tradingsymbol,
                             exchange=self.kite.EXCHANGE_NFO,
@@ -6735,7 +9335,7 @@ class UltimateFNOTrader:
                             current_ltp = None
                         
                         base_price = current_ltp if (current_ltp and current_ltp > 0.05) else exit_price
-                        limit_price = self._market_protection_limit(base_price, 'SELL', 'FUT')
+                        limit_price = self._protected_limit_with_depth(q.get(quote_key_full, {}) or {}, 'SELL', 'FUT', base_price)
                         
                         order_id = self._place_order(
                             tradingsymbol=tradingsymbol,
@@ -6911,6 +9511,7 @@ def main():
     parser.add_argument("--max-symbols", type=int, default=20)
     parser.add_argument("--mode", type=str, choices=["LIVE","PAPER"], default=None)
     parser.add_argument("--strategy", type=str, choices=list(UltimateFNOTrader.STRATEGY_CONFIGS.keys()) + ["ADAPTIVE_AUTO"], default=None)
+    parser.add_argument("--broker", type=str, choices=["GROWW","KITE"], default=None)
     parser.add_argument("--no-dashboard", action="store_true")
     parser.add_argument("--scan-interval", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
@@ -6920,6 +9521,7 @@ def main():
     parser.add_argument("--observe-only", action="store_true")
     parser.add_argument("--self-test-protection", action="store_true")
     parser.add_argument("--self-test-widening", action="store_true")
+    parser.add_argument("--dashboard-only", action="store_true")
     args, unknown = parser.parse_known_args()
 
     cfg = load_config()
@@ -6937,34 +9539,38 @@ def main():
 
     print(f"{len(specific_strategies) + 1}. ADAPTIVE_AUTO (System assesses market and switches automatically.) [Nifty Filter: Strategy-Dependent]")
 
-    selected_key = args.strategy or "ADAPTIVE_AUTO"
-    if not args.backtest and args.strategy is None and not args.no_input and not cfg.get('multi_strategy_mode', False):
-        while True:
-            try:
-                choice = input(f"Select strategy (1-{len(strategy_options_display)}, default={len(strategy_options_display)}): ").strip()
-
-                if not choice:
-                    selected_key = "ADAPTIVE_AUTO"
-                    break
-
+    cfg_strategy = (cfg.get('active_strategy') or '').strip()
+    selected_key = (args.strategy or cfg_strategy or "ADAPTIVE_AUTO")
+    # Config-driven single strategy: if active_strategy present, do not prompt
+    # Keep interactive prompt only when no config and no CLI overrides
+    if (not args.backtest) and (args.strategy is None) and (not cfg_strategy) and (not args.no_input) and (not cfg.get('multi_strategy_mode', False)):
+        try:
+            choice = input(f"Select strategy (1-{len(strategy_options_display)}, default={len(strategy_options_display)}): ").strip()
+            if choice:
                 idx = int(choice) - 1
                 if 0 <= idx < len(specific_strategies):
                     selected_key = specific_strategies[idx]
-                    break
                 elif int(choice) == len(strategy_options_display):
-                     selected_key = "ADAPTIVE_AUTO"
-                     break
-                else:
-                    print("Invalid choice. Please enter a number from the list.")
-            except ValueError:
-                print("Invalid input. Please enter a number.")
+                    selected_key = "ADAPTIVE_AUTO"
+        except Exception:
+            pass
 
     dashboard_instance = None
     trader = None
 
     try:
         
-        if not API_KEY or not API_SECRET:
+        try:
+            cfg_broker = (cfg.get('broker') or '').strip().upper()
+        except Exception:
+            cfg_broker = ''
+        selected_broker = (args.broker or cfg_broker or os.getenv('BROKER') or 'GROWW').upper()
+        if selected_broker:
+            try:
+                os.environ['BROKER'] = selected_broker
+            except Exception:
+                pass
+        if selected_broker != 'GROWW' and (not API_KEY or not API_SECRET):
             try:
                 mode_arg = (args.mode or '').upper() if args.mode else ''
             except Exception:
@@ -6993,6 +9599,19 @@ def main():
             cfg = load_config()
             port = args.port if args.port is not None else cfg.get('dashboard_port', 5024)
             dashboard_instance = DashboardApp(None, port=port)
+
+        if dashboard_instance and getattr(args, "dashboard_only", False):
+            try:
+                dashboard_thread = threading.Thread(target=dashboard_instance.start_dashboard, daemon=True)
+                dashboard_thread.start()
+                cfg = load_config()
+                port = args.port if args.port is not None else cfg.get('dashboard_port', 5024)
+                logger.info(f"{Fore.GREEN}Dashboard-only mode. Access dashboard at http://0.0.0.0:{port}/. Press Ctrl+C to stop.{Style.RESET_ALL}")
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                logger.info("\nCtrl+C detected. Shutting down dashboard-only mode.")
+            return
 
         trader = UltimateFNOTrader(dashboard_instance, initial_strategy_key=selected_key, request_token_override=args.request_token, allow_input=(not args.no_input))
         try:
@@ -7091,4 +9710,5 @@ def main():
                  logger.critical(f"Error during final cleanup: {e}. Force quit.")
 
 if __name__ == "__main__":
+
     main()

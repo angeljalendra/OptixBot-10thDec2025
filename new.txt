@@ -1,0 +1,207 @@
+High-Probability Intraday Trading System
+
+A practical, rule-based document to consistently identify stocks every morning, trade with discipline, and exit profitably using probability and risk control — not prediction.
+
+⸻
+
+1. Objective of This System
+
+This document explains how professional intraday traders consistently extract profits by:
+	•	Selecting the right stocks every morning
+	•	Trading only when probability is in their favor
+	•	Exiting fast (target / stop-loss / EOD)
+	•	Avoiding emotional and impulsive trades
+
+Goal: Consistency, not perfection. A 60–70% win rate with strong risk control.
+
+⸻
+
+2. Core Philosophy (Read This First)
+
+Successful traders do not try to be right every time.
+
+They:
+	•	Trade high-probability setups only
+	•	Accept losses quickly
+	•	Repeat the same process daily
+
+“You don’t need to win every trade. You need to win more than you lose, with controlled risk.”
+
+⸻
+
+3. Daily Trading Workflow (Top-Down)
+
+Step 1: Market Bias (Before Market Opens)
+
+Check the overall market direction:
+	•	Index trend (NIFTY / BANKNIFTY)
+	•	Global cues (SGX, US markets)
+
+Rules:
+	•	Market bullish → Prefer BUY setups
+	•	Market bearish → Prefer SELL setups
+	•	Sideways → Trade fewer setups
+
+⸻
+
+Step 2: Morning Stock Selection (Pre-Market Scan)
+
+Use a screener to filter tradable stocks.
+
+Mandatory Criteria
+	•	High volume (≥ 2× 10-day average)
+	•	Good liquidity (easy entry/exit)
+	•	ATR above average (must move)
+
+Common Scan Conditions
+	•	Gap up / gap down stocks
+	•	Stocks near previous day High / Low
+	•	Stocks near strong support / resistance
+	•	Sector-wise strength
+
+Result: 5–15 stocks maximum
+
+⸻
+
+4. Confluence – The Key to High Probability
+
+A trade is taken only when multiple factors align.
+
+Example BUY Confluence Checklist
+	•	Market trend: Bullish
+	•	Stock above VWAP
+	•	Breakout above resistance
+	•	High relative volume
+	•	Bullish candle structure
+	•	Risk-Reward ≥ 1:2
+
+Minimum 4–6 confirmations required before entry.
+
+⸻
+
+5. Entry Rules (Non-Negotiable)
+	•	No entry without a predefined stop-loss
+	•	No chasing price
+	•	Entry only at levels
+
+Typical Entry Types:
+	•	Breakout entry
+	•	Pullback to VWAP
+	•	Retest of support/resistance
+
+⸻
+
+6. Stop-Loss & Risk Management (MOST IMPORTANT)
+
+Capital Risk Rule
+	•	Risk 0.5%–1% of capital per trade only
+
+Stop-Loss Placement
+	•	Below support (for BUY)
+	•	Above resistance (for SELL)
+	•	Fixed % (if structure unclear)
+
+A trader survives because of stop-losses, not targets.
+
+⸻
+
+7. Target Strategy
+
+Use small, consistent targets.
+	•	Target: 1× to 2× risk
+	•	Partial booking allowed
+	•	Trailing stop optional
+
+Example
+	•	Stop-loss: ₹10
+	•	Target: ₹15–₹20
+
+⸻
+
+8. Time-Based Exit (EOD Rule)
+	•	No overnight positions
+	•	Exit all trades before market close
+	•	If price stagnates → Exit at breakeven
+
+Time is a risk in intraday trading.
+
+⸻
+
+9. Position Sizing Formula
+
+Position Size = Risk Amount ÷ Stop-Loss
+
+Example:
+	•	Capital: ₹5,00,000
+	•	Risk per trade: 1% = ₹5,000
+	•	Stop-loss: ₹10
+	•	Quantity = 500 shares
+
+⸻
+
+10. Trade Management Rules
+	•	Max trades per day: 2–4
+	•	No revenge trading
+	•	Stop trading after daily loss limit hit
+	•	Skip trades on emotional days
+
+⸻
+
+11. Why This System Works
+	•	Trades probability, not predictions
+	•	Losses are small and controlled
+	•	Winners pay for losers
+	•	Repeatable every day
+
+This is how it appears like traders are right most of the time.
+
+⸻
+
+12. Automation (Optional but Powerful)
+
+You can automate parts of this system using:
+	•	TradingView screeners
+	•	Pine Script alerts
+	•	Broker APIs for execution
+
+Bots follow rules. Humans break them.
+
+⸻
+
+13. Common Mistakes to Avoid
+	•	Overtrading
+	•	Changing strategy frequently
+	•	Ignoring stop-loss
+	•	Trading without market bias
+
+⸻
+
+14. Final Truth
+
+There is no holy grail strategy.
+
+There is only:
+	•	Discipline
+	•	Risk management
+	•	Consistency
+
+Professionals trade the same setup for years.
+
+⸻
+
+15. Next Steps (Recommended)
+	•	Paper trade this system for 30 days
+	•	Track every trade
+	•	Optimize only after data
+
+⸻
+
+This document is designed to be printed, shared, and reused.
+
+If you want:
+	•	A ready-made checklist PDF
+	•	A Pine Script screener
+	•	A bot execution flow
+	•	A crypto / options adaptation
+
+You can build on this framework.
